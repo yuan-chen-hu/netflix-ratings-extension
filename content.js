@@ -1,0 +1,120 @@
+// Netflix Rating Overlay - content.js
+const CACHE_KEY = 'nro_cache';
+const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+let apiKey = '';
+let ratingCache = {};
+let pendingTitles = new Set();
+let observer = null;
+
+async function init() {
+  const data = await chrome.storage.local.get(['omdb_api_key', CACHE_KEY]);
+  apiKey = data.omdb_api_key || '';
+  ratingCache = data[CACHE_KEY] || {};
+  startObserver();
+  scanTitles();
+}
+
+function startObserver() {
+  if (observer) observer.disconnect();
+  observer = new MutationObserver(debounce(() => scanTitles(), 600));
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function debounce(fn, delay) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+}
+
+function scanTitles() {
+  if (!apiKey) return;
+  const selectors = [
+    '.title-card-container',
+    '.slider-item',
+    '.search-title-card',
+    '[data-uia="title-card"]',
+    '.titleCard--metaData',
+  ];
+  document.querySelectorAll(selectors.join(',')).forEach(processCard);
+}
+
+function processCard(card) {
+  const titleEl =
+    card.querySelector('.fallback-text') ||
+    card.querySelector('[data-uia="title-card-title"]') ||
+    card.querySelector('.video-title span') ||
+    card.querySelector('span[class*="title"]') ||
+    card.querySelector('p[class*="title"]');
+  if (!titleEl) return;
+  const rawTitle = titleEl.textContent.trim();
+  if (!rawTitle) return;
+  // 如果 badge 已存在且片名相同，跳過
+  const existing = card.querySelector('.nro-badge');
+  if (existing && existing.dataset.nroTitle === rawTitle) return;
+  // 片名不同（DOM 被回收）或尚無 badge，移除舊的再重注入
+  if (existing) existing.remove();
+  if (pendingTitles.has(rawTitle)) return;
+  pendingTitles.add(rawTitle);
+  fetchRatings(rawTitle).then(ratings => {
+    pendingTitles.delete(rawTitle);
+    if (ratings) injectBadge(card, titleEl, ratings, rawTitle);
+  });
+}
+
+async function fetchRatings(title) {
+  const cached = ratingCache[title];
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+  try {
+    const data = await chrome.runtime.sendMessage({ type: 'fetchRatings', title, apiKey });
+    if (data) ratingCache[title] = { ts: Date.now(), data };
+    return data || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function findTitleCard(el) {
+  let node = el.parentElement;
+  while (node && node !== document.body) {
+    if (node.classList.contains('title-card')) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+function injectBadge(card, titleEl, ratings, rawTitle) {
+  const container = findTitleCard(titleEl) || card;
+  if (container.querySelector('.nro-badge')) return;
+  const badge = document.createElement('div');
+  badge.className = 'nro-badge';
+  badge.dataset.nroTitle = rawTitle;
+  const parts = [];
+  if (ratings.imdb) {
+    const score = parseFloat(ratings.imdb);
+    const cls = score >= 7.5 ? 'nro-great' : score >= 6 ? 'nro-ok' : 'nro-bad';
+    parts.push(`<span class="nro-pill nro-imdb ${cls}"><svg viewBox="0 0 48 20" class="nro-imdb-logo"><rect width="48" height="20" rx="3" fill="#F5C518"/><text x="50%" y="14" text-anchor="middle" font-size="10" font-weight="900" font-family="Arial Black,Arial" fill="#000">IMDb</text></svg><span class="nro-score">${ratings.imdb}</span></span>`);
+  }
+  if (ratings.rt) {
+    const pct = parseInt(ratings.rt);
+    const cls = pct >= 75 ? 'nro-great' : pct >= 60 ? 'nro-ok' : 'nro-bad';
+    const emoji = pct >= 60 ? '🍅' : '🤢';
+    parts.push(`<span class="nro-pill nro-rt ${cls}"><span class="nro-rt-icon">${emoji}</span><span class="nro-score">${ratings.rt}</span></span>`);
+  }
+  if (ratings.mc) {
+    const score = parseInt(ratings.mc);
+    const cls = score >= 75 ? 'nro-great' : score >= 50 ? 'nro-ok' : 'nro-bad';
+    parts.push(`<span class="nro-pill nro-mc ${cls}"><span class="nro-mc-logo">M</span><span class="nro-score">${ratings.mc}</span></span>`);
+  }
+  if (parts.length === 0) return;
+  badge.innerHTML = parts.join('');
+  container.appendChild(badge);
+}
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.omdb_api_key) {
+    apiKey = changes.omdb_api_key.newValue || '';
+    document.querySelectorAll('.nro-badge').forEach(el => el.remove());
+    scanTitles();
+  }
+});
+
+init();

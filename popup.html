@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 300px;
+    background: #141414;
+    color: #fff;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    padding: 20px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .logo-n {
+    font-size: 28px;
+    font-weight: 900;
+    color: #E50914;
+    letter-spacing: -1px;
+  }
+  .logo-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #aaa;
+    line-height: 1.3;
+  }
+  label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #888;
+    margin-bottom: 6px;
+  }
+  input {
+    width: 100%;
+    padding: 9px 12px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 5px;
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: #E50914; }
+  input::placeholder { color: #555; }
+  .save-btn {
+    margin-top: 12px;
+    width: 100%;
+    padding: 10px;
+    background: #E50914;
+    border: none;
+    border-radius: 5px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .save-btn:hover { background: #b20710; }
+  .status {
+    margin-top: 10px;
+    font-size: 12px;
+    text-align: center;
+    color: #4ade80;
+    min-height: 16px;
+    transition: opacity 0.3s;
+  }
+  .divider {
+    border: none;
+    border-top: 1px solid #2a2a2a;
+    margin: 18px 0;
+  }
+  .help {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.6;
+  }
+  .help a {
+    color: #E50914;
+    text-decoration: none;
+  }
+  .help a:hover { text-decoration: underline; }
+  .badge-preview {
+    display: flex;
+    gap: 6px;
+    margin: 10px 0 4px;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px 2px 4px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 800;
+    background: #1a1a1a;
+  }
+  .pill-imdb { border: 1px solid rgba(245,197,24,0.6); }
+  .pill-imdb span { color: #4ade80; }
+  .pill-rt { border: 1px solid rgba(74,222,128,0.5); }
+  .pill-rt span { color: #4ade80; }
+  .pill-mc { border: 1px solid rgba(255,204,0,0.6); }
+  .pill-mc .pill-mc-logo {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; background: #ffcc00; color: #000;
+    font-size: 9px; font-weight: 900; border-radius: 3px;
+    font-family: Arial Black, Arial, sans-serif;
+  }
+  .pill-mc span { color: #4ade80; }
+</style>
+</head>
+<body>
+<div class="logo">
+  <span class="logo-n">N</span>
+  <span class="logo-title">Rating Overlay<br><span style="color:#555;font-weight:400">IMDb + Rotten Tomatoes + Metacritic</span></span>
+</div>
+
+<label>OMDb API Key</label>
+<input type="text" id="apiKey" placeholder="貼上你的 OMDb API Key..." />
+<button class="save-btn" id="saveBtn">儲存</button>
+<div class="status" id="status"></div>
+
+<hr class="divider">
+
+<div class="help">
+  <strong style="color:#aaa">預覽效果：</strong>
+  <div class="badge-preview">
+    <span class="pill pill-imdb">
+      <svg viewBox="0 0 48 20" width="30" height="13"><rect width="48" height="20" rx="3" fill="#F5C518"/><text x="50%" y="14" text-anchor="middle" font-size="10" font-weight="900" font-family="Arial" fill="#000">IMDb</text></svg>
+      <span>8.4</span>
+    </span>
+    <span class="pill pill-rt">🍅 <span>94%</span></span>
+    <span class="pill pill-mc"><span class="pill-mc-logo">M</span> <span>82/100</span></span>
+  </div>
+  <br>
+  免費 API Key 請到：<br>
+  <a href="https://www.omdbapi.com/apikey.aspx" target="_blank">omdbapi.com/apikey.aspx</a><br>
+  （免費版每天 1,000 次查詢）
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

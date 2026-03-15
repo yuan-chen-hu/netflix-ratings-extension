@@ -1,0 +1,86 @@
+/* Netflix Rating Overlay styles */
+.nro-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  right: 4px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.nro-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 3px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'Netflix Sans', 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
+
+/* IMDb pill */
+.nro-imdb {
+  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(245,197,24,0.6);
+}
+
+.nro-imdb-logo {
+  width: 30px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+/* RT pill */
+.nro-rt {
+  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(255,255,255,0.25);
+}
+
+.nro-rt-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* Score text */
+.nro-score {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* Color classes */
+.nro-great .nro-score { color: #4ade80; }
+.nro-ok    .nro-score { color: #facc15; }
+.nro-bad   .nro-score { color: #f87171; }
+
+.nro-great { border-color: rgba(74,222,128,0.5) !important; }
+.nro-ok    { border-color: rgba(250,204,21,0.5) !important; }
+.nro-bad   { border-color: rgba(248,113,113,0.5) !important; }
+
+/* Metacritic pill */
+.nro-mc {
+  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(255,200,0,0.4);
+}
+
+.nro-mc-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: #ffcc00;
+  color: #000;
+  font-size: 9px;
+  font-weight: 900;
+  border-radius: 3px;
+  flex-shrink: 0;
+  font-family: Arial Black, Arial, sans-serif;
+}

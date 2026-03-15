@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Netflix Rating Overlay",
+  "version": "1.0.0",
+  "description": "在 Netflix 片名旁顯示 IMDb、Rotten Tomatoes 與 Metacritic 評分",
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "https://www.netflix.com/*",
+    "https://www.omdbapi.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.netflix.com/*"],
+      "js": ["content.js"],
+      "css": ["ratings.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Netflix Rating Overlay",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}
