@@ -70,6 +70,30 @@
   border: 1px solid rgba(255,200,0,0.4);
 }
 
+/* Billboard hero badge */
+.nro-badge--billboard {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.nro-badge--billboard .nro-pill {
+  font-size: 13px;
+  padding: 3px 8px 3px 5px;
+}
+
+.nro-badge--billboard .nro-imdb-logo {
+  width: 36px;
+  height: 15px;
+}
+
+.nro-badge--billboard .nro-awards {
+  font-size: 12px;
+}
+
 /* Hover card badge — inline, not absolute */
 .nro-badge--hover {
   position: static;

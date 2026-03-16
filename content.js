@@ -36,8 +36,27 @@ function scanTitles() {
   ];
   document.querySelectorAll(selectors.join(',')).forEach(card => processCard(card, false));
 
-  // Hover 展開卡片
+  // Hover / detail modal
   document.querySelectorAll('.previewModal--container').forEach(card => processCard(card, true));
+
+  // 首頁頂部 billboard hero
+  document.querySelectorAll('.title-logo').forEach(logo => {
+    if (!logo.alt) return;
+    const container = logo.closest('.titleWrapper') || logo.parentElement;
+    if (container.querySelector('.nro-badge')) return;
+    const rawTitle = logo.alt.trim();
+    const cached = ratingCache[rawTitle];
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      if (cached.data) injectBillboardBadge(container, cached.data, rawTitle);
+      return;
+    }
+    if (pendingTitles.has(rawTitle)) return;
+    pendingTitles.add(rawTitle);
+    fetchRatings(rawTitle).then(ratings => {
+      pendingTitles.delete(rawTitle);
+      if (ratings) injectBillboardBadge(container, ratings, rawTitle);
+    });
+  });
 }
 
 function processCard(card, isHover = false) {
@@ -139,6 +158,36 @@ function injectBadge(card, titleEl, ratings, rawTitle, isHover = false) {
   if (isHover && ratings.awards) {
     parts.push(`<span class="nro-awards">🏆 ${ratings.awards}</span>`);
   }
+  badge.innerHTML = parts.join('');
+  container.appendChild(badge);
+}
+
+function injectBillboardBadge(container, ratings, rawTitle) {
+  if (container.querySelector('.nro-badge')) return;
+  const badge = document.createElement('div');
+  badge.className = 'nro-badge nro-badge--billboard';
+  badge.dataset.nroTitle = rawTitle;
+  const parts = [];
+  if (ratings.imdb) {
+    const score = parseFloat(ratings.imdb);
+    const cls = score >= 7.5 ? 'nro-great' : score >= 6 ? 'nro-ok' : 'nro-bad';
+    parts.push(`<span class="nro-pill nro-imdb ${cls}"><svg viewBox="0 0 48 20" class="nro-imdb-logo"><rect width="48" height="20" rx="3" fill="#F5C518"/><text x="50%" y="14" text-anchor="middle" font-size="10" font-weight="900" font-family="Arial Black,Arial" fill="#000">IMDb</text></svg><span class="nro-score">${ratings.imdb}</span></span>`);
+  }
+  if (ratings.rt) {
+    const pct = parseInt(ratings.rt);
+    const cls = pct >= 75 ? 'nro-great' : pct >= 60 ? 'nro-ok' : 'nro-bad';
+    const emoji = pct >= 60 ? '🍅' : '🤢';
+    parts.push(`<span class="nro-pill nro-rt ${cls}"><span class="nro-rt-icon">${emoji}</span><span class="nro-score">${ratings.rt}</span></span>`);
+  }
+  if (ratings.mc) {
+    const score = parseInt(ratings.mc);
+    const cls = score >= 75 ? 'nro-great' : score >= 50 ? 'nro-ok' : 'nro-bad';
+    parts.push(`<span class="nro-pill nro-mc ${cls}"><span class="nro-mc-logo">M</span><span class="nro-score">${ratings.mc}</span></span>`);
+  }
+  if (ratings.awards) {
+    parts.push(`<span class="nro-awards">🏆 ${ratings.awards}</span>`);
+  }
+  if (parts.length === 0) return;
   badge.innerHTML = parts.join('');
   container.appendChild(badge);
 }
