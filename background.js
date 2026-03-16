@@ -21,7 +21,9 @@ async function handleFetch(title, apiKey) {
     if (!res.ok) return null;
     const json = await res.json();
     if (json.Response === 'False') {
-      // 快取「查不到」結果 24 小時，避免重複消耗配額
+      // 配額用完時不快取，讓隔天重試
+      if (json.Error && json.Error.includes('limit')) return null;
+      // 查不到的片快取 24 小時
       cache[title] = { ts: Date.now(), data: null };
       chrome.storage.local.set({ [CACHE_KEY]: cache });
       return null;
@@ -31,7 +33,8 @@ async function handleFetch(title, apiKey) {
     const rt = rtEntry ? rtEntry.Value : null;
     const mcEntry = (json.Ratings || []).find(r => r.Source === 'Metacritic');
     const mc = mcEntry ? mcEntry.Value : (json.Metascore && json.Metascore !== 'N/A' ? json.Metascore + '/100' : null);
-    const data = { imdb, rt, mc, title: json.Title, year: json.Year };
+    const awards = json.Awards && json.Awards !== 'N/A' ? json.Awards : null;
+    const data = { imdb, rt, mc, awards, title: json.Title, year: json.Year };
     cache[title] = { ts: Date.now(), data };
     chrome.storage.local.set({ [CACHE_KEY]: cache });
     return data;

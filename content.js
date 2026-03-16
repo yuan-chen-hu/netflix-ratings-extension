@@ -16,7 +16,7 @@ async function init() {
 
 function startObserver() {
   if (observer) observer.disconnect();
-  observer = new MutationObserver(debounce(() => scanTitles(), 600));
+  observer = new MutationObserver(debounce(() => scanTitles(), 200));
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
@@ -34,29 +34,51 @@ function scanTitles() {
     '[data-uia="title-card"]',
     '.titleCard--metaData',
   ];
-  document.querySelectorAll(selectors.join(',')).forEach(processCard);
+  document.querySelectorAll(selectors.join(',')).forEach(card => processCard(card, false));
+
+  // Hover 展開卡片
+  document.querySelectorAll('.previewModal--container').forEach(card => processCard(card, true));
 }
 
-function processCard(card) {
-  const titleEl =
-    card.querySelector('.fallback-text') ||
-    card.querySelector('[data-uia="title-card-title"]') ||
-    card.querySelector('.video-title span') ||
-    card.querySelector('span[class*="title"]') ||
-    card.querySelector('p[class*="title"]');
-  if (!titleEl) return;
-  const rawTitle = titleEl.textContent.trim();
+function processCard(card, isHover = false) {
+  let rawTitle = '';
+  let titleEl = null;
+
+  if (isHover) {
+    // Hover / detail modal: 標題在 boxart alt，hero modal 則在 .title-logo alt
+    const boxart = card.querySelector('.previewModal--boxart');
+    const titleLogo = document.querySelector('.title-logo');
+    const source = boxart?.alt ? boxart : (titleLogo?.alt ? titleLogo : null);
+    if (!source) return;
+    rawTitle = source.alt.trim();
+    titleEl = source;
+  } else {
+    titleEl =
+      card.querySelector('.fallback-text') ||
+      card.querySelector('[data-uia="title-card-title"]') ||
+      card.querySelector('.video-title span') ||
+      card.querySelector('span[class*="title"]') ||
+      card.querySelector('p[class*="title"]');
+    if (!titleEl) return;
+    rawTitle = titleEl.textContent.trim();
+  }
   if (!rawTitle) return;
   // 如果 badge 已存在且片名相同，跳過
   const existing = card.querySelector('.nro-badge');
   if (existing && existing.dataset.nroTitle === rawTitle) return;
   // 片名不同（DOM 被回收）或尚無 badge，移除舊的再重注入
   if (existing) existing.remove();
+  // 有快取直接注入，不需等待也不受 pendingTitles 限制
+  const cached = ratingCache[rawTitle];
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    if (cached.data) injectBadge(card, titleEl, cached.data, rawTitle, isHover);
+    return;
+  }
   if (pendingTitles.has(rawTitle)) return;
   pendingTitles.add(rawTitle);
   fetchRatings(rawTitle).then(ratings => {
     pendingTitles.delete(rawTitle);
-    if (ratings) injectBadge(card, titleEl, ratings, rawTitle);
+    if (ratings) injectBadge(card, titleEl, ratings, rawTitle, isHover);
   });
 }
 
@@ -81,11 +103,20 @@ function findTitleCard(el) {
   return null;
 }
 
-function injectBadge(card, titleEl, ratings, rawTitle) {
-  const container = findTitleCard(titleEl) || card;
+function injectBadge(card, titleEl, ratings, rawTitle, isHover = false) {
+  let container;
+  if (isHover) {
+    container =
+      card.querySelector('.previewModal--detailsMetadata-left') ||
+      card.querySelector('.previewModal--metadataAndControls') ||
+      card.querySelector('.previewModal--info') ||
+      card;
+  } else {
+    container = findTitleCard(titleEl) || card;
+  }
   if (container.querySelector('.nro-badge')) return;
   const badge = document.createElement('div');
-  badge.className = 'nro-badge';
+  badge.className = isHover ? 'nro-badge nro-badge--hover' : 'nro-badge';
   badge.dataset.nroTitle = rawTitle;
   const parts = [];
   if (ratings.imdb) {
@@ -105,6 +136,9 @@ function injectBadge(card, titleEl, ratings, rawTitle) {
     parts.push(`<span class="nro-pill nro-mc ${cls}"><span class="nro-mc-logo">M</span><span class="nro-score">${ratings.mc}</span></span>`);
   }
   if (parts.length === 0) return;
+  if (isHover && ratings.awards) {
+    parts.push(`<span class="nro-awards">🏆 ${ratings.awards}</span>`);
+  }
   badge.innerHTML = parts.join('');
   container.appendChild(badge);
 }

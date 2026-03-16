@@ -70,6 +70,25 @@
   border: 1px solid rgba(255,200,0,0.4);
 }
 
+/* Hover card badge — inline, not absolute */
+.nro-badge--hover {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 6px 0 2px;
+  align-items: center;
+}
+
+.nro-awards {
+  font-size: 11px;
+  color: #facc15;
+  font-weight: 600;
+  width: 100%;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
 .nro-mc-logo {
   display: inline-flex;
   align-items: center;
