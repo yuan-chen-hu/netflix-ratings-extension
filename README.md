@@ -1,5 +1,58 @@
 # Netflix Rating Overlay 🎬
 
+Display **IMDb**, **Rotten Tomatoes**, and **Metacritic** scores directly on Netflix browse pages, overlaid on every title card.
+
+## Installation
+
+### 1. Get a Free OMDb API Key
+Go to https://www.omdbapi.com/apikey.aspx and sign up for a free account.
+(Free tier: 1,000 requests/day — plenty for normal use)
+
+> **What is an OMDb API Key?**
+> A free 8-character alphanumeric key (e.g. `a1b2c3d4`) sent to your email after registration. Click the activation link in the email before use.
+
+### 2. Load the Extension
+1. Open Chrome and navigate to `chrome://extensions/`
+2. Enable **Developer mode** (top-right toggle)
+3. Click **Load unpacked**
+4. Select this folder (`netflix-ratings-extension`)
+
+### 3. Set Your API Key
+1. Click the extension icon 🧩 in the browser toolbar
+2. Find "Netflix Rating Overlay" and click it
+3. Paste your OMDb API Key and click Save
+
+### 4. Start Browsing!
+Go to Netflix — rating badges will automatically appear on title cards as you browse.
+
+## Rating Sources
+
+| Badge | Source | Format |
+|-------|--------|--------|
+| `IMDb` yellow logo | IMDb | Score out of 10 |
+| 🍅 | Rotten Tomatoes | Tomatometer % |
+| `M` yellow logo | Metacritic | Metascore out of 100 |
+
+> All ratings are fetched via OMDb API, which aggregates IMDb, Rotten Tomatoes, and Metacritic data.
+
+## Color Legend
+
+| Color | Meaning | IMDb | Rotten Tomatoes | Metacritic |
+|-------|---------|------|-----------------|------------|
+| 🟢 Green | Great | ≥ 7.5 | ≥ 75% | ≥ 75 |
+| 🟡 Yellow | OK | 6 – 7.4 | 60 – 74% | 50 – 74 |
+| 🔴 Red | Poor | < 6 | < 60% | < 50 |
+
+## Notes
+- Ratings are cached for 7 days to minimize API usage
+- Some newer or less popular titles may not have ratings in OMDb
+- Metacritic scores are not available for all titles
+- Netflix interface must be set to English for best coverage (OMDb indexes English titles)
+
+---
+
+# 中文說明
+
 在 Netflix 瀏覽頁面的每部影片旁顯示 **IMDb**、**Rotten Tomatoes** 與 **Metacritic** 評分。
 
 ## 安裝步驟
@@ -7,6 +60,9 @@
 ### 1. 取得免費 OMDb API Key
 前往 https://www.omdbapi.com/apikey.aspx 申請免費帳號
 （免費版每天 1,000 次查詢，一般使用完全足夠）
+
+> **什麼是 OMDb API Key？**
+> 註冊後會寄到你的 Email，是一組 8 碼英數字（例如 `a1b2c3d4`）。收到信後需點擊啟用連結才能使用。
 
 ### 2. 載入擴充功能
 1. 開啟 Chrome，網址列輸入：`chrome://extensions/`
