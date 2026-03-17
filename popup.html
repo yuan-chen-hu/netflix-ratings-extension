@@ -88,6 +88,25 @@
     text-decoration: none;
   }
   .help a:hover { text-decoration: underline; }
+  .api-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  .api-status.ok { background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+  .api-status.limit { background: rgba(249,115,22,0.1); color: #f97316; border: 1px solid rgba(249,115,22,0.3); }
+  .api-status.invalid { background: rgba(229,9,20,0.1); color: #f87171; border: 1px solid rgba(229,9,20,0.3); }
+  .api-status.unknown { background: rgba(255,255,255,0.05); color: #666; border: 1px solid #333; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .ok .status-dot { background: #4ade80; }
+  .limit .status-dot { background: #f97316; }
+  .invalid .status-dot { background: #f87171; }
+  .unknown .status-dot { background: #555; }
   .badge-preview {
     display: flex;
     gap: 6px;
@@ -123,6 +142,10 @@
   <span class="logo-title">Rating Overlay<br><span style="color:#555;font-weight:400">IMDb + Rotten Tomatoes + Metacritic</span></span>
 </div>
 
+<div class="api-status unknown" id="apiStatus">
+  <span class="status-dot"></span>
+  <span id="apiStatusText">Checking...</span>
+</div>
 <label>OMDb API Key</label>
 <input type="text" id="apiKey" placeholder="貼上你的 OMDb API Key..." />
 <button class="save-btn" id="saveBtn">儲存</button>

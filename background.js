@@ -21,13 +21,20 @@ async function handleFetch(title, apiKey) {
     if (!res.ok) return null;
     const json = await res.json();
     if (json.Response === 'False') {
-      // 配額用完時不快取，讓隔天重試
-      if (json.Error && json.Error.includes('limit')) return null;
+      if (json.Error && json.Error.includes('limit')) {
+        setApiStatus('limit', 'Daily limit reached — resets at UTC midnight');
+        return null;
+      }
+      if (json.Error && json.Error.includes('Invalid API key')) {
+        setApiStatus('invalid', 'Invalid API Key');
+        return null;
+      }
       // 查不到的片快取 24 小時
       cache[title] = { ts: Date.now(), data: null };
       chrome.storage.local.set({ [CACHE_KEY]: cache });
       return null;
     }
+    setApiStatus('ok', 'Working');
     const imdb = json.imdbRating && json.imdbRating !== 'N/A' ? json.imdbRating : null;
     const rtEntry = (json.Ratings || []).find(r => r.Source === 'Rotten Tomatoes');
     const rt = rtEntry ? rtEntry.Value : null;
@@ -41,4 +48,8 @@ async function handleFetch(title, apiKey) {
   } catch (e) {
     return null;
   }
+}
+
+function setApiStatus(status, message) {
+  chrome.storage.local.set({ nro_api_status: { status, message, ts: Date.now() } });
 }

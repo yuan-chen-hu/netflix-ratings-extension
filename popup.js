@@ -1,11 +1,47 @@
 const keyInput = document.getElementById('apiKey');
 const saveBtn = document.getElementById('saveBtn');
 const status = document.getElementById('status');
+const apiStatus = document.getElementById('apiStatus');
+const apiStatusText = document.getElementById('apiStatusText');
 
-// Load saved key
-chrome.storage.local.get('omdb_api_key', (data) => {
-  if (data.omdb_api_key) keyInput.value = data.omdb_api_key;
+// Load saved key, then actively check API status
+chrome.storage.local.get('omdb_api_key', async (data) => {
+  const key = data.omdb_api_key || '';
+  if (key) keyInput.value = key;
+
+  if (!key) {
+    setApiStatusUI('unknown', 'Enter your OMDb API Key above');
+    return;
+  }
+
+  setApiStatusUI('unknown', 'Checking...');
+  try {
+    const res = await fetch(`https://www.omdbapi.com/?t=inception&apikey=${key}`);
+    const json = await res.json();
+    if (json.Response === 'False') {
+      const err = (json.Error || '').toLowerCase();
+      if (err.includes('limit')) {
+        setApiStatusUI('limit', '⚠ Daily limit reached — resets at UTC 00:00 (台灣時間 08:00)');
+        chrome.storage.local.set({ nro_api_status: { status: 'limit', ts: Date.now() } });
+      } else if (err.includes('invalid')) {
+        setApiStatusUI('invalid', '✕ Invalid API Key');
+        chrome.storage.local.set({ nro_api_status: { status: 'invalid', ts: Date.now() } });
+      } else {
+        setApiStatusUI('ok', '✓ Working');
+      }
+    } else {
+      setApiStatusUI('ok', '✓ Working');
+      chrome.storage.local.set({ nro_api_status: { status: 'ok', ts: Date.now() } });
+    }
+  } catch (e) {
+    setApiStatusUI('unknown', 'Cannot reach OMDb — check network');
+  }
 });
+
+function setApiStatusUI(type, text) {
+  apiStatus.className = `api-status ${type}`;
+  apiStatusText.textContent = text;
+}
 
 saveBtn.addEventListener('click', async () => {
   const key = keyInput.value.trim();

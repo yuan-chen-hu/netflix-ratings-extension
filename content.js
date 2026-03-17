@@ -54,7 +54,10 @@ function scanTitles() {
     pendingTitles.add(rawTitle);
     fetchRatings(rawTitle).then(ratings => {
       pendingTitles.delete(rawTitle);
-      if (ratings) injectBillboardBadge(container, ratings, rawTitle);
+      if (!ratings) return;
+      if (!document.contains(container)) return;
+      if (logo.alt.trim() !== rawTitle) return;
+      injectBillboardBadge(container, ratings, rawTitle);
     });
   });
 }
@@ -97,7 +100,14 @@ function processCard(card, isHover = false) {
   pendingTitles.add(rawTitle);
   fetchRatings(rawTitle).then(ratings => {
     pendingTitles.delete(rawTitle);
-    if (ratings) injectBadge(card, titleEl, ratings, rawTitle, isHover);
+    if (!ratings) return;
+    // 驗證 card 還在 DOM 且片名沒有被回收替換
+    if (!document.contains(card)) return;
+    const currentTitle = isHover
+      ? (card.querySelector('.previewModal--boxart')?.alt || document.querySelector('.title-logo')?.alt || '')
+      : (titleEl?.textContent?.trim() || '');
+    if (currentTitle !== rawTitle) return;
+    injectBadge(card, titleEl, ratings, rawTitle, isHover);
   });
 }
 
