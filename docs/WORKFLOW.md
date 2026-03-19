@@ -9,7 +9,7 @@ Netflix page loads
 content.js init()
     ├── Read omdb_api_key from chrome.storage.local
     ├── Read nro_cache from chrome.storage.local → store in memory as ratingCache
-    ├── Start MutationObserver (fires scanTitles on DOM changes, debounced 600ms)
+    ├── Start MutationObserver (fires scanTitles on DOM changes, debounced 200ms)
     └── Run initial scanTitles()
 ```
 
@@ -83,6 +83,47 @@ appendChild to .title-card
 
 ---
 
+## Hover & Billboard Flow
+
+```
+scanTitles() also scans:
+    │
+    ├── .previewModal--container  (hover detail modal)
+    │       └── processCard(card, isHover=true)
+    │           ├── Get title from .previewModal--boxart alt or .title-logo alt
+    │           └── injectBadge into .previewModal--detailsMetadata-left
+    │               (includes awards display: 🏆)
+    │
+    └── .title-logo  (billboard hero banner)
+            └── injectBillboardBadge(container, ratings)
+                (also includes awards display)
+```
+
+---
+
+## Popup Top 3 Flow
+
+```
+popup.js renderTop3()
+    │
+    ▼
+Read nro_cache from chrome.storage.local
+    │
+    ▼
+Parse scores by selected source (IMDb / RT / MC)
+    ├── IMDb: parseFloat("8.4") → 8.4
+    ├── RT:   parseInt("94%") → 94
+    └── MC:   parseInt("82/100") → 82
+    │
+    ▼
+Filter out skipped titles → sort descending → take top 3
+    │
+    ▼
+Render with skip buttons (skipped title replaced by next in rank)
+```
+
+---
+
 ## Behavior After Page Refresh
 
 | Scenario | Result |
@@ -118,7 +159,7 @@ Netflix 頁面載入
 content.js init()
     ├── 從 chrome.storage.local 讀取 omdb_api_key
     ├── 從 chrome.storage.local 讀取 nro_cache → 存入記憶體 ratingCache
-    ├── 啟動 MutationObserver（DOM 變動時觸發 scanTitles，防抖 600ms）
+    ├── 啟動 MutationObserver（DOM 變動時觸發 scanTitles，防抖 200ms）
     └── 執行初次 scanTitles()
 ```
 
@@ -188,6 +229,47 @@ findTitleCard(titleEl) — 向上找 .title-card 祖先節點
     │
     ▼
 appendChild 到 .title-card
+```
+
+---
+
+## Hover 與 Billboard 流程
+
+```
+scanTitles() 同時掃描：
+    │
+    ├── .previewModal--container（滑鼠 hover 彈出的詳情卡片）
+    │       └── processCard(card, isHover=true)
+    │           ├── 從 .previewModal--boxart alt 或 .title-logo alt 取得片名
+    │           └── injectBadge 注入 .previewModal--detailsMetadata-left
+    │               （hover 模式會額外顯示獎項：🏆）
+    │
+    └── .title-logo（首頁頂部 billboard hero）
+            └── injectBillboardBadge(container, ratings)
+                （同樣顯示獎項）
+```
+
+---
+
+## Popup Top 3 流程
+
+```
+popup.js renderTop3()
+    │
+    ▼
+從 chrome.storage.local 讀取 nro_cache
+    │
+    ▼
+依選擇的來源解析分數（IMDb / RT / MC）
+    ├── IMDb: parseFloat("8.4") → 8.4
+    ├── RT:   parseInt("94%") → 94
+    └── MC:   parseInt("82/100") → 82
+    │
+    ▼
+過濾已跳過的片名 → 降冪排序 → 取前 3 名
+    │
+    ▼
+顯示排行，每項可點「跳過」（被跳過的片由下一順位遞補）
 ```
 
 ---

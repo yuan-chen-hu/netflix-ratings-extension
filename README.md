@@ -43,6 +43,13 @@ Go to Netflix — rating badges will automatically appear on title cards as you 
 | 🟡 Yellow | OK | 6 – 7.4 | 60 – 74% | 50 – 74 |
 | 🔴 Red | Poor | < 6 | < 60% | < 50 |
 
+## Popup Features
+
+- **API Status:** Real-time check of your OMDb API key status (working / limit reached / invalid)
+- **Top 3 Ratings:** Shows the top 3 highest-rated titles from your scanned cache
+  - Switch between IMDb, Rotten Tomatoes, and Metacritic as the ranking source (default: IMDb)
+  - Skip any title to see the next one in line
+
 ## Notes
 - Ratings are cached for 7 days to minimize API usage
 - Some newer or less popular titles may not have ratings in OMDb
@@ -95,6 +102,13 @@ Go to Netflix — rating badges will automatically appear on title cards as you 
 | 🟢 綠色 | 優秀 | ≥ 7.5 | ≥ 75% | ≥ 75 |
 | 🟡 黃色 | 普通 | 6 – 7.4 | 60 – 74% | 50 – 74 |
 | 🔴 紅色 | 較差 | < 6 | < 60% | < 50 |
+
+## Popup 功能
+
+- **API 狀態**：即時檢測 OMDb API Key 狀態（正常 / 已達上限 / 無效）
+- **Top 3 評分排行**：顯示目前已掃描影片中分數最高的前 3 名
+  - 可切換 IMDb、Rotten Tomatoes、Metacritic 作為排序來源（預設 IMDb）
+  - 可跳過任一影片，由下一順位遞補
 
 ## 注意事項
 - 評分資料來自 OMDb API（整合 IMDb、Rotten Tomatoes、Metacritic）

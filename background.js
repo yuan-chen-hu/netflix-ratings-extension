@@ -1,6 +1,34 @@
 // Netflix Rating Overlay - background.js (service worker)
 const CACHE_KEY = 'nro_cache';
 const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+const MISS_TTL = 24 * 60 * 60 * 1000;
+
+// In-memory cache — authoritative source, flushed to storage periodically
+let memCache = null;
+let flushTimer = null;
+
+async function getCache() {
+  if (memCache) return memCache;
+  const stored = await chrome.storage.local.get(CACHE_KEY);
+  memCache = stored[CACHE_KEY] || {};
+  return memCache;
+}
+
+function setCacheEntry(title, entry) {
+  if (!memCache) memCache = {};
+  memCache[title] = entry;
+  scheduleFlush();
+}
+
+function scheduleFlush() {
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => {
+    if (memCache) {
+      chrome.storage.local.set({ [CACHE_KEY]: memCache });
+    }
+    flushTimer = null;
+  }, 500);
+}
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'fetchRatings') {
@@ -10,8 +38,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 async function handleFetch(title, apiKey) {
-  const stored = await chrome.storage.local.get(CACHE_KEY);
-  const cache = stored[CACHE_KEY] || {};
+  const cache = await getCache();
   const cached = cache[title];
   if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
 
@@ -30,8 +57,7 @@ async function handleFetch(title, apiKey) {
         return null;
       }
       // 查不到的片快取 24 小時
-      cache[title] = { ts: Date.now(), data: null };
-      chrome.storage.local.set({ [CACHE_KEY]: cache });
+      setCacheEntry(title, { ts: Date.now(), data: null });
       return null;
     }
     setApiStatus('ok', 'Working');
@@ -41,9 +67,9 @@ async function handleFetch(title, apiKey) {
     const mcEntry = (json.Ratings || []).find(r => r.Source === 'Metacritic');
     const mc = mcEntry ? mcEntry.Value : (json.Metascore && json.Metascore !== 'N/A' ? json.Metascore + '/100' : null);
     const awards = json.Awards && json.Awards !== 'N/A' ? json.Awards : null;
-    const data = { imdb, rt, mc, awards, title: json.Title, year: json.Year };
-    cache[title] = { ts: Date.now(), data };
-    chrome.storage.local.set({ [CACHE_KEY]: cache });
+    const imdbID = json.imdbID || null;
+    const data = { imdb, rt, mc, awards, imdbID, title: json.Title, year: json.Year };
+    setCacheEntry(title, { ts: Date.now(), data });
     return data;
   } catch (e) {
     return null;

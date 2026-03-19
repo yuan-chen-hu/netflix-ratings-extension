@@ -88,6 +88,100 @@
     text-decoration: none;
   }
   .help a:hover { text-decoration: underline; }
+
+  /* Top 3 section */
+  .top3-section { margin-top: 0; }
+  .top3-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .top3-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #aaa;
+  }
+  .source-tabs {
+    display: flex;
+    gap: 4px;
+  }
+  .source-tab {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid #444;
+    background: #2a2a2a;
+    color: #888;
+    transition: all 0.2s;
+  }
+  .source-tab:hover { border-color: #666; color: #ccc; }
+  .source-tab.active {
+    background: #E50914;
+    border-color: #E50914;
+    color: #fff;
+  }
+  .top3-list { display: flex; flex-direction: column; gap: 8px; }
+  .top3-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #1e1e1e;
+    border-radius: 6px;
+    border: 1px solid #333;
+  }
+  .top3-rank {
+    font-size: 16px;
+    font-weight: 900;
+    color: #E50914;
+    min-width: 18px;
+    text-align: center;
+  }
+  .top3-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .top3-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #eee;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .top3-name:hover { color: #E50914; text-decoration: underline; }
+  .top3-score {
+    font-size: 11px;
+    font-weight: 800;
+    margin-top: 2px;
+  }
+  .top3-score.great { color: #4ade80; }
+  .top3-score.ok { color: #facc15; }
+  .top3-score.bad { color: #f87171; }
+  .top3-skip {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid #444;
+    background: transparent;
+    color: #666;
+    transition: all 0.2s;
+  }
+  .top3-skip:hover { border-color: #888; color: #ccc; }
+  .top3-empty {
+    font-size: 12px;
+    color: #555;
+    text-align: center;
+    padding: 16px 0;
+  }
+
   .api-status {
     display: flex;
     align-items: center;
@@ -150,6 +244,22 @@
 <input type="text" id="apiKey" placeholder="貼上你的 OMDb API Key..." />
 <button class="save-btn" id="saveBtn">儲存</button>
 <div class="status" id="status"></div>
+
+<hr class="divider">
+
+<div class="top3-section">
+  <div class="top3-header">
+    <span class="top3-title">Top 3 評分</span>
+    <div class="source-tabs">
+      <button class="source-tab active" data-source="imdb">IMDb</button>
+      <button class="source-tab" data-source="rt">RT</button>
+      <button class="source-tab" data-source="mc">MC</button>
+    </div>
+  </div>
+  <div class="top3-list" id="top3List">
+    <div class="top3-empty">尚無掃描資料，請先開啟 Netflix</div>
+  </div>
+</div>
 
 <hr class="divider">
 

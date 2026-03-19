@@ -62,12 +62,34 @@ function scanTitles() {
   });
 }
 
+function getTitle(card) {
+  // Try text-based selectors first
+  const textEl =
+    card.querySelector('.fallback-text') ||
+    card.querySelector('[data-uia="title-card-title"]') ||
+    card.querySelector('.video-title span') ||
+    card.querySelector('span[class*="title"]') ||
+    card.querySelector('p[class*="title"]');
+  if (textEl && textEl.textContent.trim()) return { el: textEl, title: textEl.textContent.trim() };
+  // Fallback: img alt (boxart image)
+  const img = card.querySelector('img[alt]');
+  if (img && img.alt.trim()) return { el: img, title: img.alt.trim() };
+  // Fallback: aria-label on card or child link
+  const ariaEl = card.querySelector('a[aria-label]') || card.querySelector('[aria-label]');
+  if (ariaEl && ariaEl.getAttribute('aria-label').trim()) {
+    return { el: ariaEl, title: ariaEl.getAttribute('aria-label').trim() };
+  }
+  if (card.getAttribute('aria-label')?.trim()) {
+    return { el: card, title: card.getAttribute('aria-label').trim() };
+  }
+  return null;
+}
+
 function processCard(card, isHover = false) {
   let rawTitle = '';
   let titleEl = null;
 
   if (isHover) {
-    // Hover / detail modal: 標題在 boxart alt，hero modal 則在 .title-logo alt
     const boxart = card.querySelector('.previewModal--boxart');
     const titleLogo = document.querySelector('.title-logo');
     const source = boxart?.alt ? boxart : (titleLogo?.alt ? titleLogo : null);
@@ -75,14 +97,10 @@ function processCard(card, isHover = false) {
     rawTitle = source.alt.trim();
     titleEl = source;
   } else {
-    titleEl =
-      card.querySelector('.fallback-text') ||
-      card.querySelector('[data-uia="title-card-title"]') ||
-      card.querySelector('.video-title span') ||
-      card.querySelector('span[class*="title"]') ||
-      card.querySelector('p[class*="title"]');
-    if (!titleEl) return;
-    rawTitle = titleEl.textContent.trim();
+    const found = getTitle(card);
+    if (!found) return;
+    titleEl = found.el;
+    rawTitle = found.title;
   }
   if (!rawTitle) return;
   // 如果 badge 已存在且片名相同，跳過
@@ -105,7 +123,7 @@ function processCard(card, isHover = false) {
     if (!document.contains(card)) return;
     const currentTitle = isHover
       ? (card.querySelector('.previewModal--boxart')?.alt || document.querySelector('.title-logo')?.alt || '')
-      : (titleEl?.textContent?.trim() || '');
+      : (getTitle(card)?.title || '');
     if (currentTitle !== rawTitle) return;
     injectBadge(card, titleEl, ratings, rawTitle, isHover);
   });
@@ -123,13 +141,61 @@ async function fetchRatings(title) {
   }
 }
 
-function findTitleCard(el) {
+function findBadgeContainer(el, card) {
+  // Walk up from titleEl looking for .title-card
   let node = el.parentElement;
-  while (node && node !== document.body) {
+  while (node && node !== document.body && node !== card) {
     if (node.classList.contains('title-card')) return node;
     node = node.parentElement;
   }
-  return null;
+  // Fallback: look for common Netflix card wrappers inside the card
+  const inner =
+    card.querySelector('.title-card') ||
+    card.querySelector('.boxart-container') ||
+    card.querySelector('[class*="titleCard"]');
+  if (inner) return inner;
+  return card;
+}
+
+function buildPills(ratings, withLinks) {
+  const parts = [];
+  if (ratings.imdb) {
+    const score = parseFloat(ratings.imdb);
+    const cls = score >= 7.5 ? 'nro-great' : score >= 6 ? 'nro-ok' : 'nro-bad';
+    const pill = `<svg viewBox="0 0 48 20" class="nro-imdb-logo"><rect width="48" height="20" rx="3" fill="#F5C518"/><text x="50%" y="14" text-anchor="middle" font-size="10" font-weight="900" font-family="Arial Black,Arial" fill="#000">IMDb</text></svg><span class="nro-score">${ratings.imdb}</span>`;
+    if (withLinks) {
+      const imdbUrl = ratings.imdbID
+        ? `https://www.imdb.com/title/${ratings.imdbID}/`
+        : `https://www.imdb.com/find/?q=${encodeURIComponent(ratings.title || '')}`;
+      parts.push(`<a href="${imdbUrl}" target="_blank" class="nro-pill nro-imdb nro-link ${cls}" title="Open IMDb">${pill}</a>`);
+    } else {
+      parts.push(`<span class="nro-pill nro-imdb ${cls}">${pill}</span>`);
+    }
+  }
+  if (ratings.rt) {
+    const pct = parseInt(ratings.rt);
+    const cls = pct >= 75 ? 'nro-great' : pct >= 60 ? 'nro-ok' : 'nro-bad';
+    const emoji = pct >= 60 ? '🍅' : '🤢';
+    const pill = `<span class="nro-rt-icon">${emoji}</span><span class="nro-score">${ratings.rt}</span>`;
+    if (withLinks) {
+      const rtQuery = encodeURIComponent(ratings.title || '');
+      parts.push(`<a href="https://www.rottentomatoes.com/search?search=${rtQuery}" target="_blank" class="nro-pill nro-rt nro-link ${cls}" title="Open Rotten Tomatoes">${pill}</a>`);
+    } else {
+      parts.push(`<span class="nro-pill nro-rt ${cls}">${pill}</span>`);
+    }
+  }
+  if (ratings.mc) {
+    const score = parseInt(ratings.mc);
+    const cls = score >= 75 ? 'nro-great' : score >= 50 ? 'nro-ok' : 'nro-bad';
+    const pill = `<span class="nro-mc-logo">M</span><span class="nro-score">${ratings.mc}</span>`;
+    if (withLinks) {
+      const mcQuery = encodeURIComponent(ratings.title || '');
+      parts.push(`<a href="https://www.metacritic.com/search/${mcQuery}/" target="_blank" class="nro-pill nro-mc nro-link ${cls}" title="Open Metacritic">${pill}</a>`);
+    } else {
+      parts.push(`<span class="nro-pill nro-mc ${cls}">${pill}</span>`);
+    }
+  }
+  return parts;
 }
 
 function injectBadge(card, titleEl, ratings, rawTitle, isHover = false) {
@@ -141,29 +207,17 @@ function injectBadge(card, titleEl, ratings, rawTitle, isHover = false) {
       card.querySelector('.previewModal--info') ||
       card;
   } else {
-    container = findTitleCard(titleEl) || card;
+    container = findBadgeContainer(titleEl, card);
+    // Ensure the container can anchor absolute positioning
+    const pos = getComputedStyle(container).position;
+    if (pos === 'static') container.style.position = 'relative';
   }
   if (container.querySelector('.nro-badge')) return;
   const badge = document.createElement('div');
   badge.className = isHover ? 'nro-badge nro-badge--hover' : 'nro-badge';
   badge.dataset.nroTitle = rawTitle;
-  const parts = [];
-  if (ratings.imdb) {
-    const score = parseFloat(ratings.imdb);
-    const cls = score >= 7.5 ? 'nro-great' : score >= 6 ? 'nro-ok' : 'nro-bad';
-    parts.push(`<span class="nro-pill nro-imdb ${cls}"><svg viewBox="0 0 48 20" class="nro-imdb-logo"><rect width="48" height="20" rx="3" fill="#F5C518"/><text x="50%" y="14" text-anchor="middle" font-size="10" font-weight="900" font-family="Arial Black,Arial" fill="#000">IMDb</text></svg><span class="nro-score">${ratings.imdb}</span></span>`);
-  }
-  if (ratings.rt) {
-    const pct = parseInt(ratings.rt);
-    const cls = pct >= 75 ? 'nro-great' : pct >= 60 ? 'nro-ok' : 'nro-bad';
-    const emoji = pct >= 60 ? '🍅' : '🤢';
-    parts.push(`<span class="nro-pill nro-rt ${cls}"><span class="nro-rt-icon">${emoji}</span><span class="nro-score">${ratings.rt}</span></span>`);
-  }
-  if (ratings.mc) {
-    const score = parseInt(ratings.mc);
-    const cls = score >= 75 ? 'nro-great' : score >= 50 ? 'nro-ok' : 'nro-bad';
-    parts.push(`<span class="nro-pill nro-mc ${cls}"><span class="nro-mc-logo">M</span><span class="nro-score">${ratings.mc}</span></span>`);
-  }
+  // Only hover/detail gets clickable links
+  const parts = buildPills(ratings, isHover);
   if (parts.length === 0) return;
   if (isHover && ratings.awards) {
     parts.push(`<span class="nro-awards">🏆 ${ratings.awards}</span>`);
@@ -177,23 +231,7 @@ function injectBillboardBadge(container, ratings, rawTitle) {
   const badge = document.createElement('div');
   badge.className = 'nro-badge nro-badge--billboard';
   badge.dataset.nroTitle = rawTitle;
-  const parts = [];
-  if (ratings.imdb) {
-    const score = parseFloat(ratings.imdb);
-    const cls = score >= 7.5 ? 'nro-great' : score >= 6 ? 'nro-ok' : 'nro-bad';
-    parts.push(`<span class="nro-pill nro-imdb ${cls}"><svg viewBox="0 0 48 20" class="nro-imdb-logo"><rect width="48" height="20" rx="3" fill="#F5C518"/><text x="50%" y="14" text-anchor="middle" font-size="10" font-weight="900" font-family="Arial Black,Arial" fill="#000">IMDb</text></svg><span class="nro-score">${ratings.imdb}</span></span>`);
-  }
-  if (ratings.rt) {
-    const pct = parseInt(ratings.rt);
-    const cls = pct >= 75 ? 'nro-great' : pct >= 60 ? 'nro-ok' : 'nro-bad';
-    const emoji = pct >= 60 ? '🍅' : '🤢';
-    parts.push(`<span class="nro-pill nro-rt ${cls}"><span class="nro-rt-icon">${emoji}</span><span class="nro-score">${ratings.rt}</span></span>`);
-  }
-  if (ratings.mc) {
-    const score = parseInt(ratings.mc);
-    const cls = score >= 75 ? 'nro-great' : score >= 50 ? 'nro-ok' : 'nro-bad';
-    parts.push(`<span class="nro-pill nro-mc ${cls}"><span class="nro-mc-logo">M</span><span class="nro-score">${ratings.mc}</span></span>`);
-  }
+  const parts = buildPills(ratings, true);
   if (ratings.awards) {
     parts.push(`<span class="nro-awards">🏆 ${ratings.awards}</span>`);
   }

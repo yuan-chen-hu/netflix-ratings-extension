@@ -113,6 +113,18 @@
   line-height: 1.4;
 }
 
+/* Clickable link pills (hover/billboard only) */
+.nro-link {
+  pointer-events: auto;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.nro-link:hover {
+  opacity: 0.85;
+  transform: scale(1.05);
+}
+
 .nro-mc-logo {
   display: inline-flex;
   align-items: center;

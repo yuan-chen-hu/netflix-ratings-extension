@@ -75,3 +75,102 @@ function showStatus(msg, color) {
 keyInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') saveBtn.click();
 });
+
+// --- Top 3 Ratings ---
+let currentSource = 'imdb';
+let skippedTitles = new Set();
+
+document.querySelectorAll('.source-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.source-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentSource = tab.dataset.source;
+    skippedTitles.clear();
+    renderTop3();
+  });
+});
+
+function parseScore(source, ratings) {
+  if (source === 'imdb') {
+    return ratings.imdb ? parseFloat(ratings.imdb) : null;
+  } else if (source === 'rt') {
+    return ratings.rt ? parseInt(ratings.rt) : null;
+  } else if (source === 'mc') {
+    return ratings.mc ? parseInt(ratings.mc) : null;
+  }
+  return null;
+}
+
+function formatScore(source, ratings) {
+  if (source === 'imdb') return ratings.imdb;
+  if (source === 'rt') return ratings.rt;
+  if (source === 'mc') return ratings.mc;
+  return null;
+}
+
+function scoreClass(source, val) {
+  if (source === 'imdb') return val >= 7.5 ? 'great' : val >= 6 ? 'ok' : 'bad';
+  if (source === 'rt') return val >= 75 ? 'great' : val >= 60 ? 'ok' : 'bad';
+  if (source === 'mc') return val >= 75 ? 'great' : val >= 50 ? 'ok' : 'bad';
+  return '';
+}
+
+function sourceLabel(source) {
+  if (source === 'imdb') return 'IMDb';
+  if (source === 'rt') return '🍅 RT';
+  if (source === 'mc') return 'Metacritic';
+  return '';
+}
+
+async function renderTop3() {
+  const listEl = document.getElementById('top3List');
+  const stored = await chrome.storage.local.get('nro_cache');
+  const cache = stored.nro_cache || {};
+
+  const scored = [];
+  for (const [title, entry] of Object.entries(cache)) {
+    if (!entry.data) continue;
+    if (skippedTitles.has(title)) continue;
+    const val = parseScore(currentSource, entry.data);
+    if (val == null) continue;
+    scored.push({ title: entry.data.title || title, rawTitle: title, score: val, ratings: entry.data });
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored.slice(0, 3);
+
+  if (top.length === 0) {
+    listEl.innerHTML = '<div class="top3-empty">此來源尚無評分資料</div>';
+    return;
+  }
+
+  listEl.innerHTML = top.map((item, i) => {
+    const cls = scoreClass(currentSource, item.score);
+    const display = formatScore(currentSource, item.ratings);
+    return `
+      <div class="top3-item">
+        <span class="top3-rank">${i + 1}</span>
+        <div class="top3-info">
+          <div class="top3-name" title="${item.title}" data-search="${encodeURIComponent(item.title)}">${item.title}</div>
+          <div class="top3-score ${cls}">${sourceLabel(currentSource)} ${display}</div>
+        </div>
+        <button class="top3-skip" data-title="${item.rawTitle}">跳過</button>
+      </div>`;
+  }).join('');
+
+  listEl.querySelectorAll('.top3-name').forEach(el => {
+    el.addEventListener('click', () => {
+      const url = `https://www.netflix.com/search?q=${el.dataset.search}`;
+      chrome.tabs.create({ url });
+    });
+  });
+
+  listEl.querySelectorAll('.top3-skip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      skippedTitles.add(btn.dataset.title);
+      renderTop3();
+    });
+  });
+}
+
+renderTop3();
