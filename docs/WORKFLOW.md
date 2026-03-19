@@ -101,13 +101,18 @@ scanTitles() also scans:
 
 ---
 
-## Popup Top 3 Flow
+## Popup Ranking Flow
 
 ```
-popup.js renderTop3()
+popup.js loadAndRender()
     │
     ▼
 Read nro_cache from chrome.storage.local
+    │
+    ▼
+Split by OMDb Type field:
+    ├── type === "series" → TV Show list
+    └── type === "movie" or missing → Movie list
     │
     ▼
 Parse scores by selected source (IMDb / RT / MC)
@@ -116,10 +121,9 @@ Parse scores by selected source (IMDb / RT / MC)
     └── MC:   parseInt("82/100") → 82
     │
     ▼
-Filter out skipped titles → sort descending → take top 3
-    │
-    ▼
-Render with skip buttons (skipped title replaced by next in rank)
+Sort descending → render full scrollable list (top 3 highlighted)
+User toggles Movie ↔ TV Show via button
+Skip button removes title, next in rank fills in
 ```
 
 ---
@@ -135,6 +139,8 @@ Render with skip buttons (skipped title replaced by next in rank)
 | Quota exceeded (1,000/day) | Returns null, not cached — recovers after UTC midnight reset |
 
 **Page refresh does NOT re-fetch all ratings. Cache persists in `chrome.storage.local`.**
+
+**Cache migration:** Cached entries missing the `type` field (from before Movie/TV Show split) are automatically re-fetched on next access, regardless of TTL.
 
 ---
 
@@ -251,13 +257,18 @@ scanTitles() 同時掃描：
 
 ---
 
-## Popup Top 3 流程
+## Popup 排行榜流程
 
 ```
-popup.js renderTop3()
+popup.js loadAndRender()
     │
     ▼
 從 chrome.storage.local 讀取 nro_cache
+    │
+    ▼
+依 OMDb Type 欄位分類：
+    ├── type === "series" → TV Show 列表
+    └── type === "movie" 或缺少 → Movie 列表
     │
     ▼
 依選擇的來源解析分數（IMDb / RT / MC）
@@ -266,10 +277,9 @@ popup.js renderTop3()
     └── MC:   parseInt("82/100") → 82
     │
     ▼
-過濾已跳過的片名 → 降冪排序 → 取前 3 名
-    │
-    ▼
-顯示排行，每項可點「跳過」（被跳過的片由下一順位遞補）
+降冪排序 → 顯示完整可滾動排行（前 3 名高亮）
+使用者透過按鈕切換 Movie ↔ TV Show
+跳過按鈕移除該片，下一順位遞補
 ```
 
 ---
@@ -285,6 +295,8 @@ popup.js renderTop3()
 | 配額用完（1000次/天） | 回傳 null，不快取，隔天重置後恢復 |
 
 **結論：刷新頁面不會重新打所有 API，快取在 chrome.storage.local 持續存在。**
+
+**快取遷移：** 缺少 `type` 欄位的舊快取（Movie/TV Show 分類功能之前的資料）會在下次存取時自動重新抓取，不受 TTL 限制。
 
 ---
 

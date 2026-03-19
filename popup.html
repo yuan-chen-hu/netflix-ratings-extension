@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <style>
@@ -89,24 +89,27 @@
   }
   .help a:hover { text-decoration: underline; }
 
-  /* Top 3 section */
-  .top3-section { margin-top: 0; }
-  .top3-header {
+  /* Ranking sections */
+  .ranking-section { margin-top: 0; }
+  .ranking-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .ranking-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #aaa;
+  }
+  .source-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 10px;
   }
-  .top3-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: #aaa;
-  }
-  .source-tabs {
-    display: flex;
-    gap: 4px;
-  }
-  .source-tab {
+  .tab-group { display: flex; gap: 4px; }
+  .tab-btn {
     padding: 3px 8px;
     border-radius: 4px;
     font-size: 11px;
@@ -117,34 +120,45 @@
     color: #888;
     transition: all 0.2s;
   }
-  .source-tab:hover { border-color: #666; color: #ccc; }
-  .source-tab.active {
+  .tab-btn:hover { border-color: #666; color: #ccc; }
+  .tab-btn.active {
     background: #E50914;
     border-color: #E50914;
     color: #fff;
   }
-  .top3-list { display: flex; flex-direction: column; gap: 8px; }
-  .top3-item {
+  .rank-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  .rank-list::-webkit-scrollbar { width: 4px; }
+  .rank-list::-webkit-scrollbar-track { background: transparent; }
+  .rank-list::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
+  .rank-list::-webkit-scrollbar-thumb:hover { background: #666; }
+  .rank-item {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 10px;
+    padding: 7px 10px;
     background: #1e1e1e;
     border-radius: 6px;
     border: 1px solid #333;
+    flex-shrink: 0;
   }
-  .top3-rank {
-    font-size: 16px;
+  .rank-item.top3 { border-color: rgba(229,9,20,0.4); }
+  .rank-num {
+    font-size: 14px;
     font-weight: 900;
-    color: #E50914;
-    min-width: 18px;
+    min-width: 20px;
     text-align: center;
+    color: #555;
   }
-  .top3-info {
-    flex: 1;
-    min-width: 0;
-  }
-  .top3-name {
+  .rank-item.top3 .rank-num { color: #E50914; font-size: 16px; }
+  .rank-info { flex: 1; min-width: 0; }
+  .rank-name {
     font-size: 12px;
     font-weight: 600;
     color: #eee;
@@ -154,17 +168,14 @@
     cursor: pointer;
     transition: color 0.2s;
   }
-  .top3-name:hover { color: #E50914; text-decoration: underline; }
-  .top3-score {
-    font-size: 11px;
-    font-weight: 800;
-    margin-top: 2px;
-  }
-  .top3-score.great { color: #4ade80; }
-  .top3-score.ok { color: #facc15; }
-  .top3-score.bad { color: #f87171; }
-  .top3-skip {
-    padding: 3px 8px;
+  .rank-name:hover { color: #E50914; text-decoration: underline; }
+  .rank-meta { font-size: 10px; color: #666; margin-top: 1px; }
+  .rank-score { font-size: 11px; font-weight: 800; }
+  .rank-score.great { color: #4ade80; }
+  .rank-score.ok { color: #facc15; }
+  .rank-score.bad { color: #f87171; }
+  .rank-skip {
+    padding: 3px 7px;
     border-radius: 4px;
     font-size: 10px;
     font-weight: 700;
@@ -173,13 +184,20 @@
     background: transparent;
     color: #666;
     transition: all 0.2s;
+    flex-shrink: 0;
   }
-  .top3-skip:hover { border-color: #888; color: #ccc; }
-  .top3-empty {
+  .rank-skip:hover { border-color: #888; color: #ccc; }
+  .rank-empty {
     font-size: 12px;
     color: #555;
     text-align: center;
-    padding: 16px 0;
+    padding: 12px 0;
+  }
+  .rank-count {
+    font-size: 10px;
+    color: #555;
+    text-align: right;
+    margin-top: 4px;
   }
 
   .api-status {
@@ -241,30 +259,38 @@
   <span id="apiStatusText">Checking...</span>
 </div>
 <label>OMDb API Key</label>
-<input type="text" id="apiKey" placeholder="貼上你的 OMDb API Key..." />
-<button class="save-btn" id="saveBtn">儲存</button>
+<input type="text" id="apiKey" data-i18n-placeholder="placeholder_apikey" placeholder="Paste your OMDb API Key..." />
+<button class="save-btn" id="saveBtn" data-i18n="save">Save</button>
 <div class="status" id="status"></div>
 
 <hr class="divider">
 
-<div class="top3-section">
-  <div class="top3-header">
-    <span class="top3-title">Top 3 評分</span>
-    <div class="source-tabs">
-      <button class="source-tab active" data-source="imdb">IMDb</button>
-      <button class="source-tab" data-source="rt">RT</button>
-      <button class="source-tab" data-source="mc">MC</button>
+<div class="ranking-section">
+  <div class="source-row">
+    <span style="font-size:10px;color:#666" data-i18n="sort_by">Sort by</span>
+    <div class="tab-group" id="sourceTabs">
+      <button class="tab-btn active" data-source="imdb">IMDb</button>
+      <button class="tab-btn" data-source="rt">RT</button>
+      <button class="tab-btn" data-source="mc">MC</button>
     </div>
   </div>
-  <div class="top3-list" id="top3List">
-    <div class="top3-empty">尚無掃描資料，請先開啟 Netflix</div>
+
+  <div class="ranking-header">
+    <div class="tab-group" id="typeTabs">
+      <button class="tab-btn active" data-type="movie">Movie</button>
+      <button class="tab-btn" data-type="series">TV Show</button>
+    </div>
+    <span class="rank-count" id="rankCount"></span>
+  </div>
+  <div class="rank-list" id="rankList">
+    <div class="rank-empty" data-i18n="no_data">No data yet</div>
   </div>
 </div>
 
 <hr class="divider">
 
 <div class="help">
-  <strong style="color:#aaa">預覽效果：</strong>
+  <strong style="color:#aaa" data-i18n="preview">Preview:</strong>
   <div class="badge-preview">
     <span class="pill pill-imdb">
       <svg viewBox="0 0 48 20" width="30" height="13"><rect width="48" height="20" rx="3" fill="#F5C518"/><text x="50%" y="14" text-anchor="middle" font-size="10" font-weight="900" font-family="Arial" fill="#000">IMDb</text></svg>
@@ -274,9 +300,9 @@
     <span class="pill pill-mc"><span class="pill-mc-logo">M</span> <span>82/100</span></span>
   </div>
   <br>
-  免費 API Key 請到：<br>
+  <span data-i18n="api_help">Get a free API Key at:</span><br>
   <a href="https://www.omdbapi.com/apikey.aspx" target="_blank">omdbapi.com/apikey.aspx</a><br>
-  （免費版每天 1,000 次查詢）
+  <span data-i18n="api_limit">(Free tier: 1,000 requests/day)</span>
 </div>
 
 <script src="popup.js"></script>

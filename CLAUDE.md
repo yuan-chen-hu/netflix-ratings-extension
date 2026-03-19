@@ -19,7 +19,7 @@ manifest.json       Extension config (MV3)
 background.js       Service worker — handles all OMDb API fetch calls
 content.js          Injected into Netflix pages — scans cards, injects badges
 ratings.css         Badge styles injected into Netflix pages
-popup.html/js       Extension popup UI — API key management, API status, Top 3 ratings
+popup.html/js       Extension popup UI — API key, ranking (Movie/TV Show), i18n
 ```
 
 **Key design decision:** All `fetch()` calls to `omdbapi.com` are made from `background.js` (service worker), NOT from `content.js`. This is because Netflix's CSP blocks fetch requests from content scripts. `content.js` uses `chrome.runtime.sendMessage` to ask the background worker to fetch on its behalf.
@@ -30,9 +30,9 @@ popup.html/js       Extension popup UI — API key management, API status, Top 3
 2. For each title found, sends `{ type: 'fetchRatings', title, apiKey }` to `background.js`
 3. `background.js` checks `chrome.storage.local` cache (7-day TTL for hits, 24-hour TTL for misses)
 4. On cache miss, fetches from OMDb API and caches the result
-5. Returns `{ imdb, rt, mc, awards, title, year }` to `content.js`
+5. Returns `{ imdb, rt, mc, awards, imdbID, type, title, year }` to `content.js`
 6. `content.js` injects a `.nro-badge` div into the `.title-card` DOM node
-7. Popup reads `nro_cache` from storage to display Top 3 ranked titles by selected source
+7. Popup reads `nro_cache` from storage to display ranked titles (Movie / TV Show) by selected source
 
 ## Key Implementation Details
 
@@ -41,7 +41,10 @@ popup.html/js       Extension popup UI — API key management, API status, Top 3
 - **Badge placement:** Badges are injected into `.title-card` (not `.fallback-text-container`) as `position: absolute; bottom: 4px` overlays, because `.boxart-container` has `overflow: hidden; height: 0` which clips children
 - **Hover/detail modal:** `processCard(card, true)` handles `.previewModal--container` elements, injecting badges into the expanded detail view
 - **Billboard hero:** Top banner titles (`.title-logo`) get badges via `injectBillboardBadge()` with a distinct `nro-badge--billboard` style
-- **Popup Top 3:** Popup reads `nro_cache` directly from storage, sorts by user-selected source (IMDb/RT/MC), and shows the top 3 with skip/replace functionality
+- **Popup ranking:** Popup reads `nro_cache` from storage, splits into Movie vs TV Show (OMDb `Type` field: `"movie"` or `"series"`), sorts by user-selected source (IMDb/RT/MC), shows full scrollable ranking with top 3 highlighted and skip functionality
+- **External links:** Hover/billboard badges link to IMDb (via `imdbID`), Rotten Tomatoes search, and Metacritic search. Small card badges remain non-clickable
+- **i18n:** Popup auto-detects browser language — Chinese (`zh-*`) gets Chinese UI, all other languages get English
+- **Cache migration:** `background.js` re-fetches cached entries missing the `type` field (added later) so Movie/TV Show classification works for old data
 - **OMDb coverage:** English Netflix titles have much better coverage than Chinese/Asian titles. Netflix interface language affects which titles get ratings
 
 ## Documentation Maintenance Rule

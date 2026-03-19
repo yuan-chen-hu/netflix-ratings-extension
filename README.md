@@ -46,9 +46,14 @@ Go to Netflix — rating badges will automatically appear on title cards as you 
 ## Popup Features
 
 - **API Status:** Real-time check of your OMDb API key status (working / limit reached / invalid)
-- **Top 3 Ratings:** Shows the top 3 highest-rated titles from your scanned cache
+- **Ranking:** Scrollable ranking list split by Movie and TV Show (toggle to switch)
+  - Top 3 highlighted, scroll down to see full ranking
   - Switch between IMDb, Rotten Tomatoes, and Metacritic as the ranking source (default: IMDb)
   - Skip any title to see the next one in line
+  - Click title name to open Netflix search for that title
+- **External Links (hover/detail view):** Click IMDb / RT / Metacritic badges to open the title on that site
+- **i18n:** Auto-detects browser language — Chinese for `zh-*` locales, English for all others
+- **Data source:** Year and Movie/TV Show classification come from OMDb API (sourced from IMDb)
 
 ## Notes
 - Ratings are cached for 7 days to minimize API usage
@@ -106,9 +111,14 @@ Go to Netflix — rating badges will automatically appear on title cards as you 
 ## Popup 功能
 
 - **API 狀態**：即時檢測 OMDb API Key 狀態（正常 / 已達上限 / 無效）
-- **Top 3 評分排行**：顯示目前已掃描影片中分數最高的前 3 名
+- **排行榜**：可滾動的排行榜，分為 Movie 與 TV Show（按鈕切換）
+  - 前 3 名高亮顯示，往下滾動可看完整排名
   - 可切換 IMDb、Rotten Tomatoes、Metacritic 作為排序來源（預設 IMDb）
   - 可跳過任一影片，由下一順位遞補
+  - 點擊片名可跳轉到 Netflix 搜尋該影片
+- **外部連結（hover / 詳情頁）**：點擊 IMDb / RT / Metacritic badge 可開啟對應網站
+- **多語系**：自動偵測瀏覽器語言 — `zh-*` 顯示中文，其他語言顯示英文
+- **資料來源**：年份與 Movie/TV Show 分類來自 OMDb API（資料源為 IMDb）
 
 ## 注意事項
 - 評分資料來自 OMDb API（整合 IMDb、Rotten Tomatoes、Metacritic）

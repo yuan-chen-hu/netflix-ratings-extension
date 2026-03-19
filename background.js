@@ -40,7 +40,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function handleFetch(title, apiKey) {
   const cache = await getCache();
   const cached = cache[title];
-  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+  // Return cached data if valid AND has the `type` field (old entries missing type get re-fetched)
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    if (!cached.data || cached.data.type) return cached.data;
+  }
 
   try {
     const url = `https://www.omdbapi.com/?t=${encodeURIComponent(title)}&apikey=${apiKey}`;
@@ -68,7 +71,8 @@ async function handleFetch(title, apiKey) {
     const mc = mcEntry ? mcEntry.Value : (json.Metascore && json.Metascore !== 'N/A' ? json.Metascore + '/100' : null);
     const awards = json.Awards && json.Awards !== 'N/A' ? json.Awards : null;
     const imdbID = json.imdbID || null;
-    const data = { imdb, rt, mc, awards, imdbID, title: json.Title, year: json.Year };
+    const type = json.Type || null; // "movie" or "series"
+    const data = { imdb, rt, mc, awards, imdbID, type, title: json.Title, year: json.Year };
     setCacheEntry(title, { ts: Date.now(), data });
     return data;
   } catch (e) {
