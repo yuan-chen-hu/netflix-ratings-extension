@@ -20,6 +20,7 @@ const i18n = {
     save_ok_no_verify: '✅ 已儲存（無法驗證，請確認網路）',
     limit_reached: '⚠ 每日上限已達 — UTC 00:00 重置（台灣 08:00）',
     network_error: '無法連線 OMDb — 請檢查網路',
+    awards: '獎項',
     skip: '跳過',
     count: (n) => `共 ${n} 筆`,
   },
@@ -41,6 +42,7 @@ const i18n = {
     save_ok_no_verify: '✅ Saved (could not verify — check network)',
     limit_reached: '⚠ Daily limit reached — resets at UTC 00:00',
     network_error: 'Cannot reach OMDb — check network',
+    awards: 'Awards',
     skip: 'Skip',
     count: (n) => `${n} total`,
   },
@@ -162,10 +164,25 @@ document.querySelectorAll('#typeTabs .tab-btn').forEach(tab => {
   });
 });
 
+// Parse awards string like "Won 2 Oscars. 3 wins & 5 nominations total." → { wins: 3, noms: 5 }
+function parseAwards(str) {
+  if (!str) return null;
+  let wins = 0, noms = 0;
+  const wMatch = str.match(/(\d+)\s*win/i);
+  if (wMatch) wins = parseInt(wMatch[1]);
+  const nMatch = str.match(/(\d+)\s*nomination/i);
+  if (nMatch) noms = parseInt(nMatch[1]);
+  return (wins + noms > 0) ? { wins, noms, total: wins + noms } : null;
+}
+
 function parseScore(source, ratings) {
   if (source === 'imdb') return ratings.imdb ? parseFloat(ratings.imdb) : null;
   if (source === 'rt') return ratings.rt ? parseInt(ratings.rt) : null;
   if (source === 'mc') return ratings.mc ? parseInt(ratings.mc) : null;
+  if (source === 'awards') {
+    const a = parseAwards(ratings.awards);
+    return a ? a.total : null;
+  }
   return null;
 }
 
@@ -173,6 +190,13 @@ function formatScore(source, ratings) {
   if (source === 'imdb') return ratings.imdb;
   if (source === 'rt') return ratings.rt;
   if (source === 'mc') return ratings.mc;
+  if (source === 'awards') {
+    const a = parseAwards(ratings.awards);
+    if (!a) return null;
+    return isChinese
+      ? `${a.wins} 獲獎 / ${a.noms} 提名`
+      : `${a.wins} wins / ${a.noms} noms`;
+  }
   return null;
 }
 
@@ -180,6 +204,7 @@ function scoreClass(source, val) {
   if (source === 'imdb') return val >= 7.5 ? 'great' : val >= 6 ? 'ok' : 'bad';
   if (source === 'rt') return val >= 75 ? 'great' : val >= 60 ? 'ok' : 'bad';
   if (source === 'mc') return val >= 75 ? 'great' : val >= 50 ? 'ok' : 'bad';
+  if (source === 'awards') return val >= 20 ? 'great' : val >= 5 ? 'ok' : 'bad';
   return '';
 }
 
@@ -187,6 +212,7 @@ function sourceLabel(source) {
   if (source === 'imdb') return 'IMDb';
   if (source === 'rt') return '🍅 RT';
   if (source === 'mc') return 'Metacritic';
+  if (source === 'awards') return '🏆';
   return '';
 }
 

@@ -30,11 +30,11 @@ function scanTitles() {
   const selectors = [
     '.title-card-container',
     '.slider-item',
-    '.search-title-card',
     '[data-uia="title-card"]',
-    '.titleCard--metaData',
+    '[data-uia="search-gallery-video-card"]',
   ];
-  document.querySelectorAll(selectors.join(',')).forEach(card => processCard(card, false));
+  const cards = document.querySelectorAll(selectors.join(','));
+  cards.forEach(card => processCard(card, false));
 
   // Hover / detail modal
   document.querySelectorAll('.previewModal--container').forEach(card => processCard(card, true));

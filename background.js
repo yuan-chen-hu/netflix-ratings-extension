@@ -22,12 +22,12 @@ function setCacheEntry(title, entry) {
 
 function scheduleFlush() {
   if (flushTimer) clearTimeout(flushTimer);
-  flushTimer = setTimeout(() => {
-    if (memCache) {
-      chrome.storage.local.set({ [CACHE_KEY]: memCache });
-    }
-    flushTimer = null;
-  }, 500);
+  flushTimer = setTimeout(flushNow, 500);
+}
+
+function flushNow() {
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  if (memCache) chrome.storage.local.set({ [CACHE_KEY]: memCache });
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -41,8 +41,12 @@ async function handleFetch(title, apiKey) {
   const cache = await getCache();
   const cached = cache[title];
   // Return cached data if valid AND has the `type` field (old entries missing type get re-fetched)
-  if (cached && Date.now() - cached.ts < CACHE_TTL) {
-    if (!cached.data || cached.data.type) return cached.data;
+  if (cached) {
+    const ttl = cached.data ? CACHE_TTL : MISS_TTL;
+    if (Date.now() - cached.ts < ttl) {
+      // Old entries missing `type` field get re-fetched
+      if (!cached.data || cached.data.type) return cached.data;
+    }
   }
 
   try {
@@ -74,6 +78,7 @@ async function handleFetch(title, apiKey) {
     const type = json.Type || null; // "movie" or "series"
     const data = { imdb, rt, mc, awards, imdbID, type, title: json.Title, year: json.Year };
     setCacheEntry(title, { ts: Date.now(), data });
+    flushNow();
     return data;
   } catch (e) {
     return null;

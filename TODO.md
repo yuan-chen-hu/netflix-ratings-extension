@@ -2,12 +2,14 @@
 
 ## 已完成
 
-- [x] Hover 展開卡片顯示評分 — previewModal 彈出時注入 badge
-- [x] 推薦高分 — Popup 排行榜（Movie / TV Show 分開，可切換 IMDb / RT / MC，可跳過遞補）
-- [x] 導入評分網站連結 — hover/detail 頁面的 badge 可點擊跳轉到 IMDb / RT / Metacritic
-- [x] 多語系 — 自動偵測瀏覽器語言，中文 / 英文 UI
+- [x] Hover 展開卡片顯示評分 (previewModal)
+- [x] Popup 排行榜（Movie / TV Show 切換，IMDb / RT / MC / 獎項排序，可跳過）
+- [x] Hover/detail badge 可點擊跳轉 IMDb / RT / Metacritic
+- [x] 多語系 UI（中文 / 英文自動偵測）
+- [x] 搜尋頁 card 顯示評分（`data-uia="search-gallery-video-card"`）
+- [x] Cache migration（舊快取缺 type 欄位時自動重查）
 
-## 待辦功能
+## 待辦
 
-- [ ] 確認來源 — 驗證 OMDb 回傳的評分資料與各評分網站實際數值一致
-- [ ] 串接 TMDB API — 用中文片名查 TMDB 取得英文片名 + IMDb ID，再用 ID 查 OMDb，提升中文 Netflix 覆蓋率並解決同名撞片問題（需額外申請免費 TMDB API key：themoviedb.org/settings/api）
+- [ ] 串接 TMDB API — 中文片名 → 英文片名 + IMDb ID，提升中文 Netflix 覆蓋率（需 TMDB API key）
+- [ ] 確認來源 — 驗證 OMDb 回傳評分與各網站實際數值一致
