@@ -62,6 +62,8 @@ loadAndRender()
 | Not found, after 24 hours | Retries OMDb |
 | Quota exceeded (1,000/day) | Returns null, not cached — recovers at UTC midnight |
 | Old cache missing `type` | Re-fetched regardless of TTL |
+| Cache > 500 entries | LRU eviction — oldest entries removed down to 450 |
+| Expired entries not re-visited | Stay in cache indefinitely (no active sweep) |
 
 ## DOM Scrolling
 
@@ -133,6 +135,8 @@ loadAndRender()
 | 查無的片，24小時後 | 重試 OMDb |
 | 配額用完（1000次/天） | 回傳 null，不快取，UTC 00:00 重置 |
 | 舊快取缺 type 欄位 | 不受 TTL 限制，自動重查 |
+| 快取超過 500 筆 | LRU eviction，刪最舊的降至 450 筆 |
+| 過期但未重新瀏覽的條目 | 無主動清除，永久留在快取直到被重查或 eviction |
 
 ## DOM 捲動
 

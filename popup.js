@@ -287,6 +287,13 @@ async function loadAndRender() {
   cachedItems.movie.sort((a, b) => b.score - a.score);
   cachedItems.series.sort((a, b) => b.score - a.score);
 
+  const totalMovie = Object.values(cache).filter(e => e.data && e.data.type !== 'series').length;
+  const totalSeries = Object.values(cache).filter(e => e.data && e.data.type === 'series').length;
+  const statsEl = document.getElementById('cacheStats');
+  if (statsEl) statsEl.textContent = isChinese
+    ? `已掃描：${totalMovie} 部電影・${totalSeries} 部影集`
+    : `Scanned: ${totalMovie} movies・${totalSeries} TV shows`;
+
   renderList();
 }
 
