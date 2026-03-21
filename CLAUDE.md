@@ -39,7 +39,7 @@ popup.html/js       Popup UI (API key, ranking, i18n)
 - **Badge placement:** `position: absolute; bottom: 4px` on `.title-card` container; billboard/hover use `position: static`
 - **External links:** Hover/billboard badges only (`isHover=true`). Small cards: `pointer-events: none`
 - **i18n:** `zh-*` → Chinese, all others → English
-- **Movie/TV split:** From OMDb `json.Type` ("movie" / "series")
+- **Movie/TV split:** From OMDb `json.Type` ("movie" / "series"). Entries missing `type` fall into Movie list as default.
 - **Cache migration:** Entries missing `type` are re-fetched regardless of TTL
 - **Cache race fix:** In-memory cache in `background.js` with debounced flush; `flushNow()` called immediately after each API write
 - **Cache size:** Max 500 entries; LRU eviction down to 450 when exceeded (`evictIfNeeded`)
