@@ -27,12 +27,15 @@ scanTitles()
 fetchRatings(title)
   ├── In-memory ratingCache hit (7d) → return immediately
   └── Miss → sendMessage to background.js
-        ├── storage cache hit (7d / 24h for not-found) → return cached
-        └── Miss → GET omdbapi.com/?t={title}&apikey={key}
-              ├── Found → cache 7d → return { imdb, rt, mc, awards, imdbID, type, title, year }
-              ├── Not found → cache 24h → return null
-              └── Error / quota → no cache → return null
+        ├── storage cache hit (7d hits / 24h misses) → return cached
+        └── Miss → rateLimitedFetch (max 3 concurrent across all tabs)
+              → GET omdbapi.com/?t={title}&apikey={key}
+                    ├── Found → cache 7d → return { imdb, rt, mc, awards, imdbID, type, title, year }
+                    ├── Not found → cache 24h → return null
+                    └── Error / quota → no cache → return null
 ```
+
+Cache is capped at 500 entries (LRU eviction to 450 when exceeded).
 
 ## Badge Injection
 - **Small cards:** `position: absolute; bottom: 4px` overlay, no clickable links
@@ -95,12 +98,15 @@ scanTitles()
 fetchRatings(title)
   ├── 記憶體 ratingCache 命中（7天）→ 直接回傳
   └── 未命中 → sendMessage 到 background.js
-        ├── storage 快取命中（7天 / 查無24小時）→ 回傳快取
-        └── 未命中 → GET omdbapi.com/?t={title}&apikey={key}
-              ├── 有資料 → 快取7天 → 回傳評分
-              ├── 查無此片 → 快取24小時 → 回傳 null
-              └── 錯誤 / 配額用完 → 不快取 → 回傳 null
+        ├── storage 快取命中（命中7天 / 查無24小時）→ 回傳快取
+        └── 未命中 → rateLimitedFetch（全 tab 最多 3 個並發）
+              → GET omdbapi.com/?t={title}&apikey={key}
+                    ├── 有資料 → 快取7天 → 回傳評分
+                    ├── 查無此片 → 快取24小時 → 回傳 null
+                    └── 錯誤 / 配額用完 → 不快取 → 回傳 null
 ```
+
+快取上限 500 筆，超過時 LRU eviction 降至 450 筆。
 
 ## Badge 注入
 - **小卡片：** `position: absolute; bottom: 4px`，無連結

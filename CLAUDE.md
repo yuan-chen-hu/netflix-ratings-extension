@@ -41,7 +41,9 @@ popup.html/js       Popup UI (API key, ranking, i18n)
 - **i18n:** `zh-*` → Chinese, all others → English
 - **Movie/TV split:** From OMDb `json.Type` ("movie" / "series")
 - **Cache migration:** Entries missing `type` are re-fetched regardless of TTL
-- **Cache race fix:** In-memory cache in `background.js` with debounced flush to storage
+- **Cache race fix:** In-memory cache in `background.js` with debounced flush; `flushNow()` called immediately after each API write
+- **Cache size:** Max 500 entries; LRU eviction down to 450 when exceeded (`evictIfNeeded`)
+- **Rate limiting:** Max 3 concurrent OMDb requests across all tabs via `rateLimitedFetch` queue
 
 ## OMDb API Limits
 

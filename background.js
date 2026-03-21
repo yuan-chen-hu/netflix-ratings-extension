@@ -2,10 +2,16 @@
 const CACHE_KEY = 'nro_cache';
 const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 const MISS_TTL = 24 * 60 * 60 * 1000;
+const CACHE_MAX = 500;      // max entries before LRU eviction
+const API_CONCURRENCY = 3;  // max simultaneous OMDb requests across all tabs
 
-// In-memory cache — authoritative source, flushed to storage periodically
+// In-memory cache — authoritative source, flushed to storage after each write
 let memCache = null;
 let flushTimer = null;
+
+// Rate limiter state
+let activeRequests = 0;
+const requestQueue = [];
 
 async function getCache() {
   if (memCache) return memCache;
@@ -17,7 +23,17 @@ async function getCache() {
 function setCacheEntry(title, entry) {
   if (!memCache) memCache = {};
   memCache[title] = entry;
+  evictIfNeeded();
   scheduleFlush();
+}
+
+function evictIfNeeded() {
+  const keys = Object.keys(memCache);
+  if (keys.length <= CACHE_MAX) return;
+  // Sort by timestamp ascending, remove oldest entries down to 90% of limit
+  const sorted = keys.sort((a, b) => (memCache[a].ts || 0) - (memCache[b].ts || 0));
+  const toRemove = keys.length - Math.floor(CACHE_MAX * 0.9);
+  sorted.slice(0, toRemove).forEach(k => delete memCache[k]);
 }
 
 function scheduleFlush() {
@@ -28,6 +44,26 @@ function scheduleFlush() {
 function flushNow() {
   if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
   if (memCache) chrome.storage.local.set({ [CACHE_KEY]: memCache });
+}
+
+// Rate-limited fetch: queues requests when API_CONCURRENCY is reached
+function rateLimitedFetch(url) {
+  return new Promise((resolve, reject) => {
+    const run = () => {
+      activeRequests++;
+      fetch(url)
+        .then(resolve, reject)
+        .finally(() => {
+          activeRequests--;
+          if (requestQueue.length > 0) requestQueue.shift()();
+        });
+    };
+    if (activeRequests < API_CONCURRENCY) {
+      run();
+    } else {
+      requestQueue.push(run);
+    }
+  });
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -44,14 +80,13 @@ async function handleFetch(title, apiKey) {
   if (cached) {
     const ttl = cached.data ? CACHE_TTL : MISS_TTL;
     if (Date.now() - cached.ts < ttl) {
-      // Old entries missing `type` field get re-fetched
       if (!cached.data || cached.data.type) return cached.data;
     }
   }
 
   try {
     const url = `https://www.omdbapi.com/?t=${encodeURIComponent(title)}&apikey=${apiKey}`;
-    const res = await fetch(url);
+    const res = await rateLimitedFetch(url);
     if (!res.ok) return null;
     const json = await res.json();
     if (json.Response === 'False') {
@@ -63,8 +98,8 @@ async function handleFetch(title, apiKey) {
         setApiStatus('invalid', 'Invalid API Key');
         return null;
       }
-      // 查不到的片快取 24 小時
       setCacheEntry(title, { ts: Date.now(), data: null });
+      flushNow();
       return null;
     }
     setApiStatus('ok', 'Working');

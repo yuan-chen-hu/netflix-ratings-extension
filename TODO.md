@@ -8,6 +8,9 @@
 - [x] 多語系 UI（中文 / 英文自動偵測）
 - [x] 搜尋頁 card 顯示評分（`data-uia="search-gallery-video-card"`）
 - [x] Cache migration（舊快取缺 type 欄位時自動重查）
+- [x] Cache 容量控制（LRU eviction，上限 500 筆）
+- [x] Rate limiting（最多 3 個並發 OMDb 請求，queue 排隊）
+- [x] MISS_TTL bug fix（查無的片正確使用 24h TTL）
 
 ## 待辦
 
