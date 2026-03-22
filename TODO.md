@@ -7,10 +7,8 @@
 - [x] Hover/detail badge 可點擊跳轉 IMDb / RT / Metacritic
 - [x] 多語系 UI（中文 / 英文自動偵測）
 - [x] 搜尋頁 card 顯示評分（`data-uia="search-gallery-video-card"`）
-- [x] Cache migration（舊快取缺 type 欄位時自動重查）
-- [x] Cache 容量控制（LRU eviction，上限 500 筆）
-- [x] Rate limiting（最多 3 個並發 OMDb 請求，queue 排隊）
-- [x] MISS_TTL bug fix（查無的片正確使用 24h TTL）
+- [x] Cache migration、LRU eviction（上限 500 筆）、rate limiting（3 並發）
+- [x] Popup 排除清單：匯入 IMDb/Letterboxd CSV、Netflix 觀看紀錄自動同步（背景 tab + 自動 load more）、單筆/全部還原
 
 ## 待辦
 

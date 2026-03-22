@@ -23,6 +23,19 @@ const i18n = {
     awards: '獎項',
     skip: '跳過',
     count: (n) => `共 ${n} 筆`,
+    exclude_label: '從排行榜排除',
+    import_csv: '匯入 CSV',
+    sync_netflix: 'Netflix 觀看紀錄',
+    excluded_count: (n) => `已排除 ${n} 部`,
+    restore_all: '全部還原',
+    clear_excludes: '清除',
+    import_ok: (n) => `✓ 匯入 ${n} 部`,
+    sync_reading: '讀取中...',
+    sync_ok: (n) => `✓ 同步 ${n} 部`,
+    sync_open: '已開啟頁面',
+    sync_not_ready: '請至觀看紀錄頁',
+    show_excluded: (n) => `▾ 查看 ${n} 部`,
+    hide_excluded: '▴ 隱藏',
   },
   en: {
     save: 'Save',
@@ -45,6 +58,19 @@ const i18n = {
     awards: 'Awards',
     skip: 'Skip',
     count: (n) => `${n} total`,
+    exclude_label: 'Exclude from ranking',
+    import_csv: 'Import CSV',
+    sync_netflix: 'Netflix History',
+    excluded_count: (n) => `${n} excluded`,
+    restore_all: 'Restore all',
+    clear_excludes: 'Clear',
+    import_ok: (n) => `✓ ${n} imported`,
+    sync_reading: 'Reading...',
+    sync_ok: (n) => `✓ ${n} synced`,
+    sync_open: 'Page opened',
+    sync_not_ready: 'Visit viewingactivity',
+    show_excluded: (n) => `▾ Show ${n}`,
+    hide_excluded: '▴ Hide',
   },
 };
 
@@ -142,6 +168,7 @@ keyInput.addEventListener('keydown', (e) => {
 let currentSource = 'imdb';
 let currentType = 'movie';
 let skippedTitles = new Set();
+let excludedTitles = new Set();
 let cachedItems = { movie: [], series: [] };
 
 document.querySelectorAll('#sourceTabs .tab-btn').forEach(tab => {
@@ -220,7 +247,7 @@ function renderList() {
   const listEl = document.getElementById('rankList');
   const countEl = document.getElementById('rankCount');
   const items = cachedItems[currentType] || [];
-  const filtered = items.filter(it => !skippedTitles.has(it.rawTitle));
+  const filtered = items.filter(it => !skippedTitles.has(it.rawTitle) && !excludedTitles.has(it.rawTitle) && !excludedTitles.has(it.title));
 
   if (filtered.length === 0) {
     listEl.innerHTML = `<div class="rank-empty">${t.no_data}</div>`;
@@ -298,3 +325,182 @@ async function loadAndRender() {
 }
 
 loadAndRender();
+
+// --- Exclude list ---
+
+function splitCSVLine(line) {
+  const fields = [];
+  let field = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { field += '"'; i++; }
+      else { inQuotes = !inQuotes; }
+    } else if (ch === ',' && !inQuotes) {
+      fields.push(field); field = '';
+    } else {
+      field += ch;
+    }
+  }
+  fields.push(field);
+  return fields;
+}
+
+// Parses IMDb CSV (Title column), Letterboxd CSV (Name column), or plain text (one per line)
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 1) return [];
+  const headers = splitCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, '').trim());
+  const titleIdx = headers.findIndex(h => h === 'Title' || h === 'Name');
+  if (titleIdx === -1) {
+    // Plain text fallback: one title per line
+    return lines.map(l => l.trim()).filter(Boolean);
+  }
+  return lines.slice(1).map(line => {
+    const fields = splitCSVLine(line);
+    return (fields[titleIdx] || '').replace(/^"|"$/g, '').trim();
+  }).filter(Boolean);
+}
+
+async function addExcludes(titles) {
+  const data = await chrome.storage.local.get('nro_exclude');
+  const exclude = data.nro_exclude || {};
+  titles.forEach(t => { if (t) exclude[t] = 1; });
+  await chrome.storage.local.set({ nro_exclude: exclude });
+  excludedTitles = new Set(Object.keys(exclude));
+  updateExcludeUI();
+  renderList();
+}
+
+let excludeListVisible = false;
+
+function updateExcludeUI() {
+  const toggleBtn = document.getElementById('toggleExcludeBtn');
+  const restoreAllBtn = document.getElementById('restoreAllBtn');
+  const listEl = document.getElementById('excludeList');
+  if (!toggleBtn) return;
+  if (excludedTitles.size > 0) {
+    toggleBtn.style.display = '';
+    toggleBtn.textContent = excludeListVisible ? t.hide_excluded : t.show_excluded(excludedTitles.size);
+    restoreAllBtn.style.display = '';
+    if (excludeListVisible) renderExcludeList();
+  } else {
+    toggleBtn.style.display = 'none';
+    restoreAllBtn.style.display = 'none';
+    listEl.style.display = 'none';
+    excludeListVisible = false;
+  }
+}
+
+function renderExcludeList() {
+  const listEl = document.getElementById('excludeList');
+  if (!listEl) return;
+  const titles = [...excludedTitles].sort();
+  listEl.innerHTML = titles.map(title =>
+    `<div class="exclude-list-item">
+      <span class="exclude-list-name" title="${title}">${title}</span>
+      <button class="exclude-restore" data-title="${title}">✕</button>
+    </div>`
+  ).join('');
+  listEl.querySelectorAll('.exclude-restore').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const data = await chrome.storage.local.get('nro_exclude');
+      const exclude = data.nro_exclude || {};
+      delete exclude[btn.dataset.title];
+      await chrome.storage.local.set({ nro_exclude: exclude });
+      excludedTitles = new Set(Object.keys(exclude));
+      updateExcludeUI();
+      renderList();
+    });
+  });
+}
+
+document.getElementById('toggleExcludeBtn').addEventListener('click', () => {
+  excludeListVisible = !excludeListVisible;
+  const listEl = document.getElementById('excludeList');
+  listEl.style.display = excludeListVisible ? '' : 'none';
+  updateExcludeUI();
+});
+
+async function initExcludes() {
+  const data = await chrome.storage.local.get('nro_exclude');
+  excludedTitles = new Set(Object.keys(data.nro_exclude || {}));
+  updateExcludeUI();
+}
+
+// Import CSV / TXT button
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const titles = parseCSV(ev.target.result);
+    await addExcludes(titles);
+    const btn = document.getElementById('importBtn');
+    btn.textContent = t.import_ok(titles.length);
+    btn.classList.add('exclude-btn-ok');
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// Sync from Netflix viewing activity — opens background tab, auto-closes when done
+document.getElementById('syncNetflixBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('syncNetflixBtn');
+  btn.textContent = t.sync_reading;
+  btn.disabled = true;
+
+  // Snapshot current exclude count to detect new additions
+  const beforeCount = excludedTitles.size;
+
+  // Open viewing activity in background (no tab switch)
+  const tab = await chrome.tabs.create({
+    url: 'https://www.netflix.com/viewingactivity',
+    active: false,
+  });
+
+  // Listen for "done" message from content script
+  const onDone = (msg) => {
+    if (msg.type !== 'viewingHistoryDone') return;
+    chrome.runtime.onMessage.removeListener(onDone);
+    clearTimeout(fallbackTimer);
+    chrome.tabs.remove(tab.id).catch(() => {});
+    finish(msg.count - beforeCount);
+  };
+  chrome.runtime.onMessage.addListener(onDone);
+
+  // Fallback: if no message after 30s, read storage directly and close tab
+  const fallbackTimer = setTimeout(async () => {
+    chrome.runtime.onMessage.removeListener(onDone);
+    chrome.tabs.remove(tab.id).catch(() => {});
+    const data = await chrome.storage.local.get('nro_exclude');
+    const newCount = Object.keys(data.nro_exclude || {}).length - beforeCount;
+    finish(newCount);
+  }, 30000);
+
+  async function finish(added) {
+    const data = await chrome.storage.local.get('nro_exclude');
+    excludedTitles = new Set(Object.keys(data.nro_exclude || {}));
+    btn.textContent = added > 0 ? t.sync_ok(added) : t.sync_not_ready;
+    if (added > 0) btn.classList.add('exclude-btn-ok');
+    btn.disabled = false;
+    updateExcludeUI();
+    renderList();
+  }
+});
+
+// Restore all excludes
+document.getElementById('restoreAllBtn').addEventListener('click', async () => {
+  await chrome.storage.local.remove('nro_exclude');
+  excludedTitles = new Set();
+  excludeListVisible = false;
+  updateExcludeUI();
+  renderList();
+});
+
+
+initExcludes();

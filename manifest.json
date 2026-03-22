@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "在 Netflix 片名旁顯示 IMDb、Rotten Tomatoes 與 Metacritic 評分",
   "permissions": [
-    "storage"
+    "storage",
+    "tabs"
   ],
   "background": {
     "service_worker": "background.js"

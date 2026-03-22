@@ -34,6 +34,7 @@ Display **IMDb**, **Rotten Tomatoes**, and **Metacritic** scores on Netflix titl
   - Skip any title; next in rank fills in
   - Click title to open Netflix search
 - **External Links:** Hover/detail badges link to IMDb, RT, Metacritic
+- **Exclude list:** Hide titles from ranking — import IMDb/Letterboxd CSV, sync Netflix watch history (background, auto load-more), per-title or restore-all
 - **i18n:** Chinese for `zh-*` browsers, English for all others
 - **Data source:** Year and Movie/TV classification from OMDb (sourced from IMDb)
 
@@ -81,6 +82,7 @@ Display **IMDb**, **Rotten Tomatoes**, and **Metacritic** scores on Netflix titl
   - 可跳過任一影片，由下一順位遞補
   - 點擊片名跳轉 Netflix 搜尋
 - **外部連結**：Hover / 詳情頁 badge 可點擊開啟 IMDb / RT / Metacritic
+- **排除清單**：從排行榜隱藏已看過的片 — 匯入 IMDb/Letterboxd CSV、同步 Netflix 觀看紀錄（背景自動載入全部）、單筆或全部還原
 - **多語系**：`zh-*` 顯示中文，其他語言顯示英文
 - **資料來源**：年份與 Movie/TV Show 分類來自 OMDb（資料源為 IMDb）
 

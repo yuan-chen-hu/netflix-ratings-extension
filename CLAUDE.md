@@ -45,6 +45,7 @@ popup.html/js       Popup UI (API key, ranking, i18n)
 - **Cache TTL:** 7 days for hits, 24h for misses. No active expiry sweep — expired entries stay until re-queried or LRU eviction.
 - **Cache size:** Max 500 entries; LRU eviction down to 450 when exceeded (`evictIfNeeded`)
 - **Rate limiting:** Max 3 concurrent OMDb requests across all tabs via `rateLimitedFetch` queue
+- **Exclude list:** Stored in `nro_exclude` (chrome.storage.local). Populated via IMDb/Letterboxd CSV import or Netflix viewing activity sync (background tab, auto load-more, auto-close). Per-title restore or restore-all in popup.
 
 ## OMDb API Limits
 

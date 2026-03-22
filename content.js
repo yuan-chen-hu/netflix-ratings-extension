@@ -10,8 +10,12 @@ async function init() {
   const data = await chrome.storage.local.get(['omdb_api_key', CACHE_KEY]);
   apiKey = data.omdb_api_key || '';
   ratingCache = data[CACHE_KEY] || {};
-  startObserver();
-  scanTitles();
+  if (location.pathname === '/viewingactivity') {
+    scanViewingActivity();
+  } else {
+    startObserver();
+    scanTitles();
+  }
 }
 
 function startObserver() {
@@ -239,6 +243,66 @@ function injectBillboardBadge(container, ratings, rawTitle) {
   badge.innerHTML = parts.join('');
   container.appendChild(badge);
 }
+
+// Viewing activity page: auto-extract watched titles into exclude list
+function extractViewingTitles() {
+  const titles = new Set();
+  // Try multiple selectors for Netflix viewing activity page
+  document.querySelectorAll('.retableRow .title a, .viewing-activity-item a, a[class*="activityItem"]').forEach(a => {
+    const t = a.textContent.trim();
+    if (t) titles.add(t);
+  });
+  // Fallback: any link whose text looks like a title (not nav/UI chrome)
+  if (titles.size === 0) {
+    document.querySelectorAll('a').forEach(a => {
+      const t = a.textContent.trim();
+      if (t && t.length > 1 && t.length < 100 && a.closest('[class*="row"], [class*="item"], li, td')) {
+        titles.add(t);
+      }
+    });
+  }
+  return [...titles];
+}
+
+function scanViewingActivity() {
+  const save = () => {
+    const titles = extractViewingTitles();
+    if (titles.length === 0) return;
+    chrome.storage.local.get('nro_exclude', data => {
+      const exclude = data.nro_exclude || {};
+      titles.forEach(t => { exclude[t] = 1; });
+      chrome.storage.local.set({ nro_exclude: exclude });
+    });
+    // Notify popup with final count
+    chrome.runtime.sendMessage({ type: 'viewingHistoryDone', count: titles.length }).catch(() => {});
+  };
+
+  // Auto-click "Show More" to load all pages, then save
+  let clickCount = 0;
+  const loadAllAndSave = () => {
+    const moreBtn = [...document.querySelectorAll('button')].find(b =>
+      /show more|load more|顯示更多|더 보기/i.test(b.textContent.trim())
+    );
+    if (moreBtn && clickCount < 5) {
+      clickCount++;
+      moreBtn.click();
+      setTimeout(loadAllAndSave, 1500);
+    } else {
+      save();
+    }
+  };
+
+  // Wait for initial render, then start loading all pages
+  setTimeout(loadAllAndSave, 2000);
+}
+
+// Message listener: popup can request viewing history on demand
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'getViewingHistory') {
+    sendResponse({ titles: extractViewingTitles() });
+  }
+  return true;
+});
 
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.omdb_api_key) {
