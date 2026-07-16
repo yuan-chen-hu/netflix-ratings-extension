@@ -6,21 +6,58 @@ let ratingCache = {};
 let pendingTitles = new Set();
 let observer = null;
 
+// Platform detection — Netflix and Disney+ have different DOM structures
+const IS_DISNEY = location.hostname.includes('disneyplus.com');
+// Dispatcher the MutationObserver and storage listener call on each pass
+const scan = () => (IS_DISNEY ? scanDisney() : scanTitles());
+
+// Viewport gating: grid cards are only processed once they scroll into view,
+// so offscreen cards don't run getTitle()/fetch on every mutation pass.
+// The MutationObserver still drives re-processing of visible cards, which is
+// what catches Netflix's recycled (reused) card nodes.
+const visibleCards = new WeakSet();
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (e.isIntersecting) {
+      visibleCards.add(e.target);
+      processVisibleCard(e.target);
+    } else {
+      visibleCards.delete(e.target);
+    }
+  }
+}, { rootMargin: '300px' });
+
+function processVisibleCard(card) {
+  if (IS_DISNEY) {
+    const title = disneyTitle(card);
+    if (title) processDisneyCard(card, title);
+  } else {
+    processCard(card, false);
+  }
+}
+
+// Register a card with the IntersectionObserver (idempotent) and process it
+// immediately if it's already known to be on-screen.
+function observeCard(card) {
+  io.observe(card);
+  if (visibleCards.has(card)) processVisibleCard(card);
+}
+
 async function init() {
   const data = await chrome.storage.local.get(['omdb_api_key', CACHE_KEY]);
   apiKey = data.omdb_api_key || '';
   ratingCache = data[CACHE_KEY] || {};
-  if (location.pathname === '/viewingactivity') {
+  if (!IS_DISNEY && location.pathname === '/viewingactivity') {
     scanViewingActivity();
   } else {
     startObserver();
-    scanTitles();
+    scan();
   }
 }
 
 function startObserver() {
   if (observer) observer.disconnect();
-  observer = new MutationObserver(debounce(() => scanTitles(), 200));
+  observer = new MutationObserver(debounce(() => scan(), 200));
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
@@ -38,7 +75,7 @@ function scanTitles() {
     '[data-uia="search-gallery-video-card"]',
   ];
   const cards = document.querySelectorAll(selectors.join(','));
-  cards.forEach(card => processCard(card, false));
+  cards.forEach(observeCard);
 
   // Hover / detail modal
   document.querySelectorAll('.previewModal--container').forEach(card => processCard(card, true));
@@ -56,7 +93,7 @@ function scanTitles() {
     }
     if (pendingTitles.has(rawTitle)) return;
     pendingTitles.add(rawTitle);
-    fetchRatings(rawTitle).then(ratings => {
+    fetchRatings(rawTitle, extractYear(container)).then(ratings => {
       pendingTitles.delete(rawTitle);
       if (!ratings) return;
       if (!document.contains(container)) return;
@@ -64,6 +101,22 @@ function scanTitles() {
       injectBillboardBadge(container, ratings, rawTitle);
     });
   });
+}
+
+// Best-effort release year for OMDb disambiguation (same-title-different-year).
+// Only the hover modal and billboard expose it; grid cards don't, so this
+// returns null there and the query stays year-less. Scoped to metadata rows to
+// avoid matching stray 4-digit numbers in descriptions.
+function extractYear(scope) {
+  if (!scope) return null;
+  const metaEl =
+    scope.querySelector('[class*="year"]') ||
+    scope.querySelector('.previewModal--detailsMetadata-info') ||
+    scope.querySelector('.videoMetadata--container') ||
+    scope.querySelector('.previewModal--metadataAndControls');
+  const text = (metaEl || scope).textContent || '';
+  const m = text.match(/\b(19|20)\d{2}\b/);
+  return m ? m[0] : null;
 }
 
 function getTitle(card) {
@@ -120,7 +173,7 @@ function processCard(card, isHover = false) {
   }
   if (pendingTitles.has(rawTitle)) return;
   pendingTitles.add(rawTitle);
-  fetchRatings(rawTitle).then(ratings => {
+  fetchRatings(rawTitle, isHover ? extractYear(card) : null).then(ratings => {
     pendingTitles.delete(rawTitle);
     if (!ratings) return;
     // 驗證 card 還在 DOM 且片名沒有被回收替換
@@ -133,11 +186,59 @@ function processCard(card, isHover = false) {
   });
 }
 
-async function fetchRatings(title) {
+// --- Disney+ ---
+// Tiles are <a href="/browse/entity-…"> anchors wrapping an <img alt="Title">.
+// Nav/collection links share the /browse/ path but have no image, so the img
+// check filters them out.
+function scanDisney() {
+  if (!apiKey) return;
+  document.querySelectorAll('a[href*="/browse/"]').forEach(card => {
+    if (disneyTitle(card)) observeCard(card);
+  });
+}
+
+function disneyTitle(card) {
+  const img = card.querySelector('img[alt]');
+  return (img?.alt || card.getAttribute('aria-label') || '').trim();
+}
+
+function processDisneyCard(card, rawTitle) {
+  const existing = card.querySelector('.nro-badge');
+  if (existing && existing.dataset.nroTitle === rawTitle) return;
+  if (existing) existing.remove();
+  const cached = ratingCache[rawTitle];
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    if (cached.data) injectDisneyBadge(card, cached.data, rawTitle);
+    return;
+  }
+  if (pendingTitles.has(rawTitle)) return;
+  pendingTitles.add(rawTitle);
+  fetchRatings(rawTitle).then(ratings => {
+    pendingTitles.delete(rawTitle);
+    if (!ratings) return;
+    if (!document.contains(card)) return;
+    if (disneyTitle(card) !== rawTitle) return; // DOM recycled with new title
+    injectDisneyBadge(card, ratings, rawTitle);
+  });
+}
+
+function injectDisneyBadge(card, ratings, rawTitle) {
+  if (card.querySelector('.nro-badge')) return;
+  if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+  const parts = buildPills(ratings, false);
+  if (parts.length === 0) return;
+  const badge = document.createElement('div');
+  badge.className = 'nro-badge';
+  badge.dataset.nroTitle = rawTitle;
+  badge.innerHTML = parts.join('');
+  card.appendChild(badge);
+}
+
+async function fetchRatings(title, year = null) {
   const cached = ratingCache[title];
   if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
   try {
-    const data = await chrome.runtime.sendMessage({ type: 'fetchRatings', title, apiKey });
+    const data = await chrome.runtime.sendMessage({ type: 'fetchRatings', title, year, apiKey });
     if (data) ratingCache[title] = { ts: Date.now(), data };
     return data || null;
   } catch (e) {
@@ -308,7 +409,7 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.omdb_api_key) {
     apiKey = changes.omdb_api_key.newValue || '';
     document.querySelectorAll('.nro-badge').forEach(el => el.remove());
-    scanTitles();
+    scan();
   }
 });
 

@@ -76,6 +76,17 @@ const i18n = {
 
 const t = isChinese ? i18n.zh : i18n.en;
 
+// Escape user/API-derived strings before interpolating into innerHTML,
+// so titles containing " < > & ' don't break attributes or markup.
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Apply i18n to static HTML elements
 document.querySelectorAll('[data-i18n]').forEach(el => {
   const key = el.dataset.i18n;
@@ -259,15 +270,20 @@ function renderList() {
     const cls = scoreClass(currentSource, item.score);
     const display = formatScore(currentSource, item.ratings);
     const isTop3 = i < 3 ? ' top3' : '';
-    const yearStr = item.year ? `(${item.year})` : '';
+    const yearStr = item.year ? `(${escapeHtml(item.year)})` : '';
+    const safeTitle = escapeHtml(item.title);
+    const safeRaw = escapeHtml(item.rawTitle);
     return `
       <div class="rank-item${isTop3}">
         <span class="rank-num">${i + 1}</span>
         <div class="rank-info">
-          <div class="rank-name" title="${item.title}" data-search="${encodeURIComponent(item.title)}">${item.title}</div>
-          <div class="rank-meta">${yearStr} <span class="rank-score ${cls}">${sourceLabel(currentSource)} ${display}</span></div>
+          <div class="rank-name" title="${safeTitle}" data-search="${encodeURIComponent(item.title)}">${safeTitle}</div>
+          <div class="rank-meta">${yearStr} <span class="rank-score ${cls}">${sourceLabel(currentSource)} ${escapeHtml(display)}</span></div>
         </div>
-        <button class="rank-skip" data-title="${item.rawTitle}">${t.skip}</button>
+        <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">
+          <button class="rank-skip" data-title="${safeRaw}">${t.skip}</button>
+          <button class="rank-exclude" data-title="${safeRaw}" data-display="${safeTitle}" title="${t.exclude_label}">✕</button>
+        </div>
       </div>`;
   }).join('');
 
@@ -283,6 +299,12 @@ function renderList() {
     btn.addEventListener('click', () => {
       skippedTitles.add(btn.dataset.title);
       renderList();
+    });
+  });
+
+  listEl.querySelectorAll('.rank-exclude').forEach(btn => {
+    btn.addEventListener('click', () => {
+      addExcludes([btn.dataset.title, btn.dataset.display]);
     });
   });
 }
@@ -396,12 +418,13 @@ function renderExcludeList() {
   const listEl = document.getElementById('excludeList');
   if (!listEl) return;
   const titles = [...excludedTitles].sort();
-  listEl.innerHTML = titles.map(title =>
-    `<div class="exclude-list-item">
-      <span class="exclude-list-name" title="${title}">${title}</span>
-      <button class="exclude-restore" data-title="${title}">✕</button>
-    </div>`
-  ).join('');
+  listEl.innerHTML = titles.map(title => {
+    const safe = escapeHtml(title);
+    return `<div class="exclude-list-item">
+      <span class="exclude-list-name" title="${safe}">${safe}</span>
+      <button class="exclude-restore" data-title="${safe}">✕</button>
+    </div>`;
+  }).join('');
   listEl.querySelectorAll('.exclude-restore').forEach(btn => {
     btn.addEventListener('click', async () => {
       const data = await chrome.storage.local.get('nro_exclude');

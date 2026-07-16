@@ -68,12 +68,12 @@ function rateLimitedFetch(url) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'fetchRatings') {
-    handleFetch(msg.title, msg.apiKey).then(sendResponse);
+    handleFetch(msg.title, msg.apiKey, msg.year).then(sendResponse);
     return true; // keep channel open for async
   }
 });
 
-async function handleFetch(title, apiKey) {
+async function handleFetch(title, apiKey, year) {
   const cache = await getCache();
   const cached = cache[title];
   // Return cached data if valid AND has the `type` field (old entries missing type get re-fetched)
@@ -85,7 +85,8 @@ async function handleFetch(title, apiKey) {
   }
 
   try {
-    const url = `https://www.omdbapi.com/?t=${encodeURIComponent(title)}&apikey=${apiKey}`;
+    const yearParam = year ? `&y=${encodeURIComponent(year)}` : '';
+    const url = `https://www.omdbapi.com/?t=${encodeURIComponent(title)}${yearParam}&apikey=${apiKey}`;
     const res = await rateLimitedFetch(url);
     if (!res.ok) return null;
     const json = await res.json();
