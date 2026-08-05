@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Netflix Rating Overlay",
-  "version": "1.0.0",
+  "name": "Stream Rating Overlay",
+  "version": "1.2.0",
   "description": "在 Netflix 與 Disney+ 片名旁顯示 IMDb、Rotten Tomatoes 與 Metacritic 評分",
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "background": {
     "service_worker": "background.js"
@@ -13,7 +14,9 @@
   "host_permissions": [
     "https://www.netflix.com/*",
     "https://www.disneyplus.com/*",
-    "https://www.omdbapi.com/*"
+    "https://www.omdbapi.com/*",
+    "https://www.imdb.com/*",
+    "https://api.themoviedb.org/*"
   ],
   "content_scripts": [
     {
@@ -33,7 +36,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Netflix Rating Overlay",
+    "default_title": "Stream Rating Overlay",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

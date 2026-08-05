@@ -36,6 +36,33 @@ const i18n = {
     sync_not_ready: '請至觀看紀錄頁',
     show_excluded: (n) => `▾ 查看 ${n} 部`,
     hide_excluded: '▴ 隱藏',
+    list_filter_label: 'IMDb 清單過濾（套用於 Netflix / Disney+ 頁面）',
+    only_in_list: '只顯示清單內的影片',
+    hide_in_list: '隱藏清單內的影片',
+    list_url_ph: 'https://www.imdb.com/list/ls…',
+    load_list: '載入',
+    filter_mode: '被過濾的影片',
+    mode_dim: '淡化',
+    mode_hide: '隱藏',
+    list_loading: '讀取清單中…',
+    list_loaded: (n, d) => `✓ ${n} 部・更新於 ${d}`,
+    list_cleared: '已清除清單',
+    list_err_url: '網址無效 — 請貼上 IMDb 清單網址（…/list/ls…）',
+    list_err_empty: '讀不到內容 — 請確認清單設為「公開」',
+    list_err_net: '無法連線 IMDb',
+    list_need_url: '請先貼上清單網址並按「載入」',
+    layout_info: (n, m) => `版面偵測：${n} 張卡片（${m}）`,
+    layout_known: '內建選擇器',
+    layout_mixed: '內建＋自動偵測',
+    layout_adaptive: '自動偵測',
+    layout_none: '⚠ 找不到卡片 — 請重新整理串流頁面',
+    tmdb_label: 'TMDB API Key（選填）',
+    tmdb_ph: '中文／日文／韓文片名比對用',
+    tmdb_help: '片名是中文等在地語系？加一組免費 TMDB Key：',
+    tmdb_saved: (n) => `✓ 已儲存 — 在地語系片名將透過 TMDB 對應 IMDb ID`,
+    tmdb_invalid: '✕ TMDB Key 無效',
+    tmdb_cleared: '已清除 TMDB Key',
+    tmdb_checking: '驗證中…',
   },
   en: {
     save: 'Save',
@@ -71,6 +98,33 @@ const i18n = {
     sync_not_ready: 'Visit viewingactivity',
     show_excluded: (n) => `▾ Show ${n}`,
     hide_excluded: '▴ Hide',
+    list_filter_label: 'IMDb list filter (applies on Netflix / Disney+)',
+    only_in_list: 'Only show titles in this list',
+    hide_in_list: 'Hide titles in this list',
+    list_url_ph: 'https://www.imdb.com/list/ls…',
+    load_list: 'Load',
+    filter_mode: 'Filtered titles',
+    mode_dim: 'Dim',
+    mode_hide: 'Hide',
+    list_loading: 'Loading list…',
+    list_loaded: (n, d) => `✓ ${n} titles・updated ${d}`,
+    list_cleared: 'List cleared',
+    list_err_url: 'Invalid URL — paste an IMDb list URL (…/list/ls…)',
+    list_err_empty: 'Nothing found — make sure the list is public',
+    list_err_net: 'Cannot reach IMDb',
+    list_need_url: 'Paste a list URL and press Load first',
+    layout_info: (n, m) => `Layout: ${n} cards detected (${m})`,
+    layout_known: 'built-in selectors',
+    layout_mixed: 'built-in + auto-detect',
+    layout_adaptive: 'auto-detect',
+    layout_none: '⚠ No cards found — reload the streaming page',
+    tmdb_label: 'TMDB API Key (optional)',
+    tmdb_ph: 'For localized titles (中文/日本語/한국어)',
+    tmdb_help: 'Localized titles? Add a free TMDB key:',
+    tmdb_saved: () => '✓ Saved — localized titles now resolve via TMDB',
+    tmdb_invalid: '✕ Invalid TMDB key',
+    tmdb_cleared: 'TMDB key cleared',
+    tmdb_checking: 'Validating…',
   },
 };
 
@@ -175,6 +229,48 @@ keyInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') saveBtn.click();
 });
 
+// --- TMDB key (optional): bridges localized titles to an IMDb ID ---
+const tmdbInput = document.getElementById('tmdbKey');
+const tmdbSaveBtn = document.getElementById('tmdbSaveBtn');
+
+function setTmdbStatusUI(text, cls) {
+  const el = document.getElementById('tmdbStatus');
+  el.textContent = text;
+  el.className = `list-status ${cls || ''}`;
+}
+
+chrome.storage.local.get('tmdb_api_key', (d) => {
+  if (d.tmdb_api_key) {
+    tmdbInput.value = d.tmdb_api_key;
+    setTmdbStatusUI(t.tmdb_saved(), 'ok');
+  }
+});
+
+tmdbSaveBtn.addEventListener('click', async () => {
+  const key = tmdbInput.value.trim();
+  if (!key) {
+    await chrome.storage.local.remove('tmdb_api_key');
+    setTmdbStatusUI(t.tmdb_cleared, '');
+    return;
+  }
+  setTmdbStatusUI(t.tmdb_checking, '');
+  try {
+    const res = await fetch(`https://api.themoviedb.org/3/configuration?api_key=${encodeURIComponent(key)}`);
+    if (res.status === 401) {
+      setTmdbStatusUI(t.tmdb_invalid, 'err');
+      return;
+    }
+  } catch (e) {
+    /* offline — save anyway, background will retry */
+  }
+  await chrome.storage.local.set({ tmdb_api_key: key });
+  setTmdbStatusUI(t.tmdb_saved(), 'ok');
+});
+
+tmdbInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') tmdbSaveBtn.click();
+});
+
 // --- Ranking ---
 let currentSource = 'imdb';
 let currentType = 'movie';
@@ -258,7 +354,11 @@ function renderList() {
   const listEl = document.getElementById('rankList');
   const countEl = document.getElementById('rankCount');
   const items = cachedItems[currentType] || [];
-  const filtered = items.filter(it => !skippedTitles.has(it.rawTitle) && !excludedTitles.has(it.rawTitle) && !excludedTitles.has(it.title));
+  const filtered = items.filter(it =>
+    !skippedTitles.has(it.rawTitle) &&
+    !excludedTitles.has(it.rawTitle) &&
+    !excludedTitles.has(it.title) &&
+    passesListFilter(it));
 
   if (filtered.length === 0) {
     listEl.innerHTML = `<div class="rank-empty">${t.no_data}</div>`;
@@ -527,3 +627,199 @@ document.getElementById('restoreAllBtn').addEventListener('click', async () => {
 
 
 initExcludes();
+
+// --- IMDb list filter ---
+// Two independent lists: `include` (only these titles stay visible) and
+// `exclude` (these titles get filtered out). Each has its own on/off switch,
+// and content.js re-applies both live via chrome.storage.onChanged.
+
+const LIST_SLOTS = ['include', 'exclude'];
+let storedLists = {};
+let listSettings = { includeOn: false, excludeOn: false, mode: 'dim' };
+let listMatchers = { include: null, exclude: null };
+
+// Keep in sync with the copy in content.js
+function titleKeys(s) {
+  const base = String(s || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+  if (!base) return [];
+  const keys = [base];
+  const stripped = base.replace(/^(the|a|an)\s+/, '');
+  if (stripped !== base) keys.push(stripped);
+  return keys;
+}
+
+function buildMatcher(raw) {
+  if (!raw) return null;
+  const ids = new Set(raw.ids || []);
+  const titles = new Set();
+  (raw.titles || []).forEach(x => titleKeys(x).forEach(k => titles.add(k)));
+  if (!ids.size && !titles.size) return null;
+  return { ids, titles };
+}
+
+function matchList(list, rawTitle, ratings) {
+  if (!list) return false;
+  if (ratings && ratings.imdbID && list.ids.has(ratings.imdbID)) return true;
+  for (const k of titleKeys(rawTitle)) if (list.titles.has(k)) return true;
+  if (ratings && ratings.title) {
+    for (const k of titleKeys(ratings.title)) if (list.titles.has(k)) return true;
+  }
+  return false;
+}
+
+// Same rules the page overlay uses, applied to the popup ranking
+function passesListFilter(item) {
+  const r = item.ratings || {};
+  if (listSettings.excludeOn && listMatchers.exclude && matchList(listMatchers.exclude, item.rawTitle, r)) return false;
+  if (listSettings.includeOn && listMatchers.include && !matchList(listMatchers.include, item.rawTitle, r)) return false;
+  return true;
+}
+
+function setListStatus(slot, text, cls) {
+  const el = document.getElementById(slot + 'Status');
+  if (!el) return;
+  el.textContent = text;
+  el.className = `list-status ${cls || ''}`;
+}
+
+function renderListStatus(slot) {
+  const list = storedLists[slot];
+  if (!list) { setListStatus(slot, '', ''); return; }
+  const when = list.ts ? new Date(list.ts).toLocaleDateString() : '';
+  setListStatus(slot, t.list_loaded(list.count || (list.ids || []).length, when), 'ok');
+}
+
+async function saveListSettings() {
+  await chrome.storage.local.set({ nro_list_settings: listSettings });
+}
+
+async function loadList(slot) {
+  const urlEl = document.getElementById(slot + 'Url');
+  const input = urlEl.value.trim();
+
+  if (!input) { // empty field = clear this slot
+    delete storedLists[slot];
+    listMatchers[slot] = null;
+    listSettings[slot + 'On'] = false;
+    document.getElementById(slot + 'Toggle').checked = false;
+    await chrome.storage.local.set({ nro_lists: storedLists });
+    await saveListSettings();
+    setListStatus(slot, t.list_cleared, '');
+    renderList();
+    return;
+  }
+
+  setListStatus(slot, t.list_loading, '');
+  let res;
+  try {
+    // background.js does the fetching (and the storage write, so the result
+    // survives the popup being closed mid-load)
+    res = await chrome.runtime.sendMessage({ type: 'fetchImdbList', url: input, slot });
+  } catch (e) {
+    res = { error: 'network' };
+  }
+  if (!res || res.error) {
+    // The background may have stored the list even if the reply was lost
+    const saved = (await chrome.storage.local.get('nro_lists')).nro_lists || {};
+    if (saved[slot]) {
+      storedLists = saved;
+      listMatchers[slot] = buildMatcher(saved[slot]);
+      renderListStatus(slot);
+      renderList();
+      return;
+    }
+    const err = res && res.error;
+    setListStatus(slot, err === 'bad_url' ? t.list_err_url : err === 'empty' ? t.list_err_empty : t.list_err_net, 'err');
+    return;
+  }
+
+  storedLists = (await chrome.storage.local.get('nro_lists')).nro_lists || {};
+  listMatchers[slot] = buildMatcher(storedLists[slot]);
+  urlEl.value = res.url;
+  // A freshly loaded list is switched on — the switch stays available to
+  // turn it back off at any time.
+  listSettings[slot + 'On'] = true;
+  document.getElementById(slot + 'Toggle').checked = true;
+  await saveListSettings();
+  renderListStatus(slot);
+  renderList();
+}
+
+function renderLayoutInfo(layout) {
+  const el = document.getElementById('layoutInfo');
+  if (!el || !layout) return;
+  if (Date.now() - (layout.ts || 0) > 10 * 60 * 1000) return; // stale
+  if (!layout.count) {
+    el.textContent = t.layout_none;
+    el.className = 'layout-info warn';
+    return;
+  }
+  const modeLabel = t['layout_' + layout.mode] || layout.mode;
+  el.textContent = t.layout_info(layout.count, modeLabel);
+  el.className = 'layout-info';
+}
+
+async function initListFilter() {
+  const d = await chrome.storage.local.get(['nro_lists', 'nro_list_settings', 'nro_layout']);
+  storedLists = d.nro_lists || {};
+  listSettings = Object.assign(listSettings, d.nro_list_settings || {});
+
+  LIST_SLOTS.forEach(slot => {
+    const list = storedLists[slot];
+    if (list && list.url) document.getElementById(slot + 'Url').value = list.url;
+    listMatchers[slot] = buildMatcher(list);
+    renderListStatus(slot);
+
+    document.getElementById(slot + 'Load').addEventListener('click', () => loadList(slot));
+    document.getElementById(slot + 'Url').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadList(slot);
+    });
+    document.getElementById(slot + 'Toggle').addEventListener('change', async (e) => {
+      if (e.target.checked && !storedLists[slot]) {
+        e.target.checked = false;
+        setListStatus(slot, t.list_need_url, 'err');
+        return;
+      }
+      listSettings[slot + 'On'] = e.target.checked;
+      await saveListSettings();
+      renderList();
+    });
+  });
+
+  document.getElementById('includeToggle').checked = !!listSettings.includeOn;
+  document.getElementById('excludeToggle').checked = !!listSettings.excludeOn;
+
+  const modeEl = document.getElementById('filterMode');
+  modeEl.value = listSettings.mode || 'dim';
+  modeEl.addEventListener('change', async () => {
+    listSettings.mode = modeEl.value;
+    await saveListSettings();
+  });
+
+  renderLayoutInfo(d.nro_layout);
+  renderList();
+}
+
+// A tab-based list load can outlive the message reply — reflect it as soon as
+// background.js writes the result.
+chrome.storage.onChanged.addListener((changes) => {
+  if (!changes.nro_lists) return;
+  storedLists = changes.nro_lists.newValue || {};
+  LIST_SLOTS.forEach(slot => {
+    listMatchers[slot] = buildMatcher(storedLists[slot]);
+    renderListStatus(slot);
+    if (storedLists[slot] && storedLists[slot].url) {
+      const el = document.getElementById(slot + 'Url');
+      if (!el.value.trim()) el.value = storedLists[slot].url;
+    }
+  });
+  renderList();
+});
+
+initListFilter();

@@ -1,4 +1,4 @@
-/* Netflix Rating Overlay styles */
+/* Stream Rating Overlay styles */
 .nro-badge {
   position: absolute;
   bottom: 4px;
@@ -123,6 +123,20 @@
 .nro-link:hover {
   opacity: 0.85;
   transform: scale(1.05);
+}
+
+/* IMDb list filter — dimmed (default) or fully hidden tiles */
+.nro-filtered {
+  opacity: 0.16 !important;
+  filter: grayscale(1);
+  transition: opacity 0.2s ease;
+}
+.nro-filtered:hover {
+  opacity: 0.6 !important;
+  filter: grayscale(0.4);
+}
+.nro-filtered-hide {
+  display: none !important;
 }
 
 .nro-mc-logo {
