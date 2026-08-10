@@ -2,23 +2,21 @@
 const CACHE_KEY = 'nro_cache';
 const LISTS_KEY = 'nro_lists';
 const LIST_SETTINGS_KEY = 'nro_list_settings';
+const PREFS_KEY = 'nro_prefs';
 const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 let apiKey = '';
 let ratingCache = {};
 let pendingTitles = new Set();
 let observer = null;
 
-// IMDb list filter state (populated from storage, live-updated on change)
+// List filter state (populated from storage, live-updated on change)
 let lists = { include: null, exclude: null };
 let listSettings = { includeOn: false, excludeOn: false, mode: 'dim' };
+// Provider + score-threshold preferences
+let prefs = { source: 'omdb', minScore: 0, minSource: 'imdb' };
 
 // Platform detection — Netflix and Disney+ have different DOM structures
 const IS_DISNEY = location.hostname.includes('disneyplus.com');
-// Dispatcher the MutationObserver and storage listener call on each pass
-const scan = () => (IS_DISNEY ? scanDisney() : scanTitles());
-// Re-run after a fetch settles so cards that were skipped as duplicates
-// (same title already in flight) pick up the result without a DOM mutation.
-const rescan = debounce(() => scan(), 300);
 
 // Viewport gating: grid cards are only processed once they scroll into view,
 // so offscreen cards don't run getTitle()/fetch on every mutation pass.
@@ -56,24 +54,105 @@ async function init() {
   const data = await chrome.storage.local.get(['omdb_api_key', CACHE_KEY]);
   apiKey = data.omdb_api_key || '';
   ratingCache = data[CACHE_KEY] || {};
-  await loadLists();
+  await loadSettings();
   if (!IS_DISNEY && location.pathname === '/viewingactivity') {
     scanViewingActivity();
   } else {
     startObserver();
-    scan();
+    scheduleScan(true);
   }
 }
 
+// --- Scan scheduling ---
+// Two passes with very different costs:
+//   selector pass — a querySelectorAll for known class hooks. Cheap, so it runs
+//     on every mutation batch, scoped to just the subtrees that changed.
+//   heuristic pass — reads offsetWidth/offsetHeight on candidate artwork, which
+//     forces layout. Whole-document by nature, so it's throttled and deferred
+//     to an idle callback.
+const SCOPED_ROOT_LIMIT = 30;   // beyond this, one document-wide pass is cheaper
+const HEURISTIC_INTERVAL = 2000;
+
+let dirtyRoots = new Set();
+let needFullScan = true;
+let scanTimer = null;
+let heuristicQueued = false;
+let lastHeuristic = 0;
+
 function startObserver() {
   if (observer) observer.disconnect();
-  observer = new MutationObserver(debounce(() => scan(), 200));
+  observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      const node = m.target && m.target.nodeType === 1 ? m.target : m.target && m.target.parentElement;
+      if (node) dirtyRoots.add(node);
+      if (dirtyRoots.size > SCOPED_ROOT_LIMIT) { needFullScan = true; break; }
+    }
+    scheduleScan(false);
+  });
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-function debounce(fn, delay) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+function scheduleScan(full) {
+  if (full) needFullScan = true;
+  if (scanTimer) return;
+  scanTimer = setTimeout(runScan, 200);
+}
+
+function runScan() {
+  scanTimer = null;
+  if (!apiKey && !filterActive()) { dirtyRoots.clear(); return; }
+  const roots = [...dirtyRoots];
+  dirtyRoots.clear();
+  const useFull = needFullScan || roots.length === 0 || roots.length > SCOPED_ROOT_LIMIT;
+  needFullScan = false;
+
+  const scopes = useFull ? [document] : roots.filter(r => r.isConnected);
+  for (const scope of scopes) selectorScan(scope);
+  // Modal and billboard are single, rare elements — one document-level check
+  // per pass costs less than working out whether a subtree contained them.
+  if (!IS_DISNEY) scanSpecialAreas();
+  scheduleHeuristic();
+}
+
+// The layout-adaptive pass. Deferred to idle time because it measures elements.
+function scheduleHeuristic() {
+  if (heuristicQueued) return;
+  heuristicQueued = true;
+  const wait = Math.max(0, HEURISTIC_INTERVAL - (Date.now() - lastHeuristic));
+  setTimeout(() => whenIdle(() => {
+    heuristicQueued = false;
+    lastHeuristic = Date.now();
+    if (!apiKey && !filterActive()) return;
+    heuristicScan();
+  }), wait);
+}
+
+function whenIdle(fn) {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 1000 });
+  else setTimeout(fn, 0);
+}
+
+function selectorScan(scope) {
+  (IS_DISNEY ? disneySelectorCards(scope) : selectorCards(scope)).forEach(observeCard);
+}
+
+function heuristicScan() {
+  if (IS_DISNEY) { heuristicScanDisney(); return; }
+  const cards = selectorCards(document);
+  const knownCount = cards.size;
+  heuristicCards().forEach(el => cards.add(el));
+  reportLayout(
+    knownCount > 0 ? (cards.size > knownCount ? 'mixed' : 'known') : (cards.size ? 'adaptive' : 'none'),
+    cards.size);
+  cards.forEach(observeCard);
+}
+
+function heuristicScanDisney() {
+  const cards = disneySelectorCards(document);
+  const knownCount = cards.size;
+  if (knownCount === 0) disneyHeuristicCards().forEach(el => cards.add(el));
+  reportLayout(knownCount > 0 ? 'known' : (cards.size ? 'adaptive' : 'none'), cards.size);
+  cards.forEach(observeCard);
 }
 
 // --- Card discovery (layout-adaptive) ---
@@ -90,6 +169,7 @@ const NF_CARD_SELECTORS = [
   '[class*="title-card"]',
   '[class*="titleCard"]',
 ];
+const NF_CARD_SELECTOR = NF_CARD_SELECTORS.join(',');
 
 const NF_TITLE_LINKS = 'a[href*="/watch/"], a[href*="/title/"], a[href*="jbv="]';
 const NF_MODAL = '.previewModal--container, [data-uia*="previewModal"], [data-uia="preview-modal"]';
@@ -100,14 +180,14 @@ function isSpecialArea(el) {
   return !!(el.closest(NF_MODAL) || el.closest(NF_BILLBOARD));
 }
 
-function findCards() {
+// Known class hooks within `scope`. `scope` is either `document` or a mutation
+// target, in which case the target itself may be the card.
+function selectorCards(scope) {
   const cards = new Set();
-  document.querySelectorAll(NF_CARD_SELECTORS.join(',')).forEach(el => {
+  scope.querySelectorAll(NF_CARD_SELECTOR).forEach(el => {
     if (!isSpecialArea(el)) cards.add(el);
   });
-  const legacyCount = cards.size;
-  heuristicCards().forEach(el => cards.add(el));
-  reportLayout(legacyCount > 0 ? (cards.size > legacyCount ? 'mixed' : 'known') : (cards.size ? 'adaptive' : 'none'), cards.size);
+  if (scope.nodeType === 1 && scope.matches(NF_CARD_SELECTOR) && !isSpecialArea(scope)) cards.add(scope);
   return cards;
 }
 
@@ -151,14 +231,10 @@ function reportLayout(mode, count) {
   }).catch(() => {});
 }
 
-function scanTitles() {
-  if (!apiKey && !listActive()) return;
-  findCards().forEach(observeCard);
-
-  // Hover / detail modal
+// Hover modal + the home page's top billboard hero.
+function scanSpecialAreas() {
   document.querySelectorAll(NF_MODAL).forEach(card => processCard(card, true));
 
-  // 首頁頂部 billboard hero
   billboardLogos().forEach(logo => {
     const container = logo.closest('.titleWrapper') || logo.closest('[class*="info" i]') || logo.parentElement;
     if (!container) return;
@@ -167,15 +243,15 @@ function scanTitles() {
     if (container.querySelector('.nro-badge')) return;
     if (!apiKey) return;
     const cached = ratingCache[rawTitle];
-    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    if (cacheHit(cached, true)) {
       if (cached.data) injectBillboardBadge(container, cached.data, rawTitle);
       return;
     }
     if (pendingTitles.has(rawTitle)) return;
     pendingTitles.add(rawTitle);
-    fetchRatings(rawTitle, extractYear(container)).then(ratings => {
+    fetchRatings(rawTitle, extractYear(container), true).then(ratings => {
       pendingTitles.delete(rawTitle);
-      rescan();
+      settleTitle(rawTitle);
       if (!ratings) return;
       if (!document.contains(container)) return;
       if ((logo.alt || '').trim() !== rawTitle) return;
@@ -246,6 +322,35 @@ function hoverTitleEl(card) {
   );
 }
 
+// --- In-flight title index ---
+// Several tiles on a page share a title (a row plus "Continue watching", the
+// same film in two carousels). Only the first triggers a fetch; the rest
+// register here and get updated directly when it settles, instead of the whole
+// page being rescanned.
+const waiting = new Map();
+
+function awaitTitle(title, card) {
+  let set = waiting.get(title);
+  if (!set) waiting.set(title, set = new Set());
+  set.add(card);
+}
+
+function settleTitle(title) {
+  const set = waiting.get(title);
+  if (!set) return;
+  waiting.delete(title);
+  set.forEach(card => { if (card.isConnected) processVisibleCard(card); });
+}
+
+// A cache entry is usable if it's fresh and, for the detail view, carries the
+// OMDb-enriched fields (RT / MC / awards) that view actually renders.
+function cacheHit(entry, detail) {
+  if (!entry || Date.now() - entry.ts >= CACHE_TTL) return false;
+  if (!entry.data) return true; // a known miss is still an answer
+  if (!detail || !apiKey) return true;
+  return !!(entry.data.full || entry.data.detailTried);
+}
+
 function processCard(card, isHover = false) {
   let rawTitle = '';
   let titleEl = null;
@@ -264,10 +369,10 @@ function processCard(card, isHover = false) {
   if (!rawTitle) return;
 
   const cached = ratingCache[rawTitle];
-  const fresh = cached && Date.now() - cached.ts < CACHE_TTL;
-  // Filter runs before (and independently of) the badge so it also works with
+  const fresh = cacheHit(cached, isHover);
+  // Filters run before (and independently of) the badge so they also work with
   // no API key — title matching alone is enough for many lists.
-  if (!isHover) applyListFilter(card, rawTitle, fresh ? cached.data : null, fresh || !apiKey);
+  if (!isHover) applyFilters(card, rawTitle, fresh ? cached.data : null, fresh || !apiKey);
   if (!apiKey) return;
 
   // 如果 badge 已存在且片名相同，跳過
@@ -280,18 +385,21 @@ function processCard(card, isHover = false) {
     if (cached.data) injectBadge(card, titleEl, cached.data, rawTitle, isHover);
     return;
   }
-  if (pendingTitles.has(rawTitle)) return;
+  if (pendingTitles.has(rawTitle)) {
+    if (!isHover) awaitTitle(rawTitle, card);
+    return;
+  }
   pendingTitles.add(rawTitle);
-  fetchRatings(rawTitle, isHover ? extractYear(card) : null).then(ratings => {
+  fetchRatings(rawTitle, isHover ? extractYear(card) : null, isHover).then(ratings => {
     pendingTitles.delete(rawTitle);
-    rescan();
+    settleTitle(rawTitle);
     // 驗證 card 還在 DOM 且片名沒有被回收替換
     if (!document.contains(card)) return;
     const currentTitle = isHover
       ? (hoverTitleEl(card)?.alt || '').trim()
       : (getTitle(card)?.title || '');
     if (currentTitle !== rawTitle) return;
-    if (!isHover) applyListFilter(card, rawTitle, ratings, true);
+    if (!isHover) applyFilters(card, rawTitle, ratings, true);
     if (!ratings) return;
     injectBadge(card, titleEl, ratings, rawTitle, isHover);
   });
@@ -301,26 +409,27 @@ function processCard(card, isHover = false) {
 // Tiles are <a href="/browse/entity-…"> anchors wrapping an <img alt="Title">.
 // Nav/collection links share the /browse/ path but have no image, so the img
 // check filters them out.
-function scanDisney() {
-  if (!apiKey && !listActive()) return;
+function disneySelectorCards(scope) {
   const cards = new Set();
-  document.querySelectorAll('a[href*="/browse/"]').forEach(card => {
+  scope.querySelectorAll('a[href*="/browse/"]').forEach(card => {
     if (disneyTitle(card)) cards.add(card);
   });
-  const knownCount = cards.size;
-  // Same adaptive fallback as Netflix: any link-wrapped artwork of tile size
-  if (knownCount === 0) {
-    document.querySelectorAll('a[href]').forEach(a => {
-      if (a.closest('nav, header, footer, [role="navigation"], [role="banner"]')) return;
-      const img = a.querySelector('img[alt]');
-      if (!img || !img.alt.trim()) return;
-      const w = a.offsetWidth;
-      if (w < 60 || w > 700) return;
-      if (disneyTitle(a)) cards.add(a);
-    });
-  }
-  reportLayout(knownCount > 0 ? 'known' : (cards.size ? 'adaptive' : 'none'), cards.size);
-  cards.forEach(observeCard);
+  if (scope.nodeType === 1 && scope.matches('a[href*="/browse/"]') && disneyTitle(scope)) cards.add(scope);
+  return cards;
+}
+
+// Same adaptive fallback as Netflix: any link-wrapped artwork of tile size
+function disneyHeuristicCards() {
+  const cards = new Set();
+  document.querySelectorAll('a[href]').forEach(a => {
+    if (a.closest('nav, header, footer, [role="navigation"], [role="banner"]')) return;
+    const img = a.querySelector('img[alt]');
+    if (!img || !img.alt.trim()) return;
+    const w = a.offsetWidth;
+    if (w < 60 || w > 700) return;
+    if (disneyTitle(a)) cards.add(a);
+  });
+  return cards;
 }
 
 function disneyTitle(card) {
@@ -344,8 +453,8 @@ function cleanTitle(raw) {
 
 function processDisneyCard(card, rawTitle) {
   const cached = ratingCache[rawTitle];
-  const fresh = cached && Date.now() - cached.ts < CACHE_TTL;
-  applyListFilter(card, rawTitle, fresh ? cached.data : null, fresh || !apiKey);
+  const fresh = cacheHit(cached, false);
+  applyFilters(card, rawTitle, fresh ? cached.data : null, fresh || !apiKey);
   if (!apiKey) return;
 
   const existing = card.querySelector('.nro-badge');
@@ -355,14 +464,14 @@ function processDisneyCard(card, rawTitle) {
     if (cached.data) injectDisneyBadge(card, cached.data, rawTitle);
     return;
   }
-  if (pendingTitles.has(rawTitle)) return;
+  if (pendingTitles.has(rawTitle)) { awaitTitle(rawTitle, card); return; }
   pendingTitles.add(rawTitle);
   fetchRatings(rawTitle).then(ratings => {
     pendingTitles.delete(rawTitle);
-    rescan();
+    settleTitle(rawTitle);
     if (!document.contains(card)) return;
     if (disneyTitle(card) !== rawTitle) return; // DOM recycled with new title
-    applyListFilter(card, rawTitle, ratings, true);
+    applyFilters(card, rawTitle, ratings, true);
     if (!ratings) return;
     injectDisneyBadge(card, ratings, rawTitle);
   });
@@ -382,11 +491,11 @@ function injectDisneyBadge(card, ratings, rawTitle) {
   container.appendChild(badge);
 }
 
-async function fetchRatings(title, year = null) {
+async function fetchRatings(title, year = null, detail = false) {
   const cached = ratingCache[title];
-  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+  if (cacheHit(cached, detail)) return cached.data;
   try {
-    const data = await chrome.runtime.sendMessage({ type: 'fetchRatings', title, year, apiKey });
+    const data = await chrome.runtime.sendMessage({ type: 'fetchRatings', title, year, detail, apiKey });
     if (data) ratingCache[title] = { ts: Date.now(), data };
     return data || null;
   } catch (e) {
@@ -394,16 +503,17 @@ async function fetchRatings(title, year = null) {
   }
 }
 
-// --- IMDb list filter ---
+// --- List + score filters ---
 
-async function loadLists() {
-  const d = await chrome.storage.local.get([LISTS_KEY, LIST_SETTINGS_KEY]);
+async function loadSettings() {
+  const d = await chrome.storage.local.get([LISTS_KEY, LIST_SETTINGS_KEY, PREFS_KEY]);
   const stored = d[LISTS_KEY] || {};
   lists = { include: buildList(stored.include), exclude: buildList(stored.exclude) };
   listSettings = Object.assign(
     { includeOn: false, excludeOn: false, mode: 'dim' },
     d[LIST_SETTINGS_KEY] || {}
   );
+  prefs = Object.assign({ source: 'omdb', minScore: 0, minSource: 'imdb' }, d[PREFS_KEY] || {});
 }
 
 function buildList(raw) {
@@ -437,6 +547,10 @@ function listActive() {
   return !!((listSettings.includeOn && lists.include) || (listSettings.excludeOn && lists.exclude));
 }
 
+function filterActive() {
+  return listActive() || prefs.minScore > 0;
+}
+
 function matchList(list, rawTitle, ratings) {
   if (!list) return false;
   if (ratings && ratings.imdbID && list.ids.has(ratings.imdbID)) return true;
@@ -447,12 +561,24 @@ function matchList(list, rawTitle, ratings) {
   return false;
 }
 
+// The score the threshold compares against. TMDB shares IMDb's 0–10 scale, so
+// it stands in when only TMDB data is available (TMDB-primary grid tiles).
+function thresholdScore(ratings) {
+  if (!ratings) return null;
+  if (prefs.minSource === 'rt') return ratings.rt ? parseInt(ratings.rt, 10) : null;
+  if (prefs.minSource === 'mc') return ratings.mc ? parseInt(ratings.mc, 10) : null;
+  const v = ratings.imdb || ratings.tmdb;
+  return v ? parseFloat(v) : null;
+}
+
 // Hide/dim the tile the card belongs to. `resolved` means we already have (or
-// definitively failed to get) OMDb data — until then "not in the include list"
-// is not yet a safe conclusion, so the card stays untouched to avoid flicker.
-function applyListFilter(card, rawTitle, ratings, resolved) {
+// definitively failed to get) rating data — until then "not in the include
+// list" is not yet a safe conclusion, so the card stays untouched to avoid
+// flicker. Titles with no score are never hidden by the threshold: a missing
+// rating is not a bad rating.
+function applyFilters(card, rawTitle, ratings, resolved) {
   const target = filterTarget(card);
-  if (!listActive()) { setFiltered(target, false); return; }
+  if (!filterActive()) { setFiltered(target, false); return; }
   let filtered = false;
   if (listSettings.excludeOn && lists.exclude && matchList(lists.exclude, rawTitle, ratings)) {
     filtered = true;
@@ -461,6 +587,11 @@ function applyListFilter(card, rawTitle, ratings, resolved) {
     const hit = matchList(lists.include, rawTitle, ratings);
     if (!hit && !resolved) return; // undecided — leave as-is
     filtered = !hit;
+  }
+  if (!filtered && prefs.minScore > 0) {
+    const score = thresholdScore(ratings);
+    if (score == null && !resolved) return; // undecided — leave as-is
+    if (score != null && score < prefs.minScore) filtered = true;
   }
   setFiltered(target, filtered);
 }
@@ -547,6 +678,19 @@ function buildPills(ratings, withLinks) {
       parts.push(`<a href="${imdbUrl}" target="_blank" class="nro-pill nro-imdb nro-link ${cls}" title="Open IMDb">${pill}</a>`);
     } else {
       parts.push(`<span class="nro-pill nro-imdb ${cls}">${pill}</span>`);
+    }
+  } else if (ratings.tmdb) {
+    // TMDB-primary grid tiles: same 0–10 scale, so the same thresholds apply.
+    const score = parseFloat(ratings.tmdb);
+    const cls = score >= 7.5 ? 'nro-great' : score >= 6 ? 'nro-ok' : 'nro-bad';
+    const pill = `<span class="nro-tmdb-logo">TMDB</span><span class="nro-score">${ratings.tmdb}</span>`;
+    if (withLinks) {
+      const url = ratings.imdbID
+        ? `https://www.themoviedb.org/find/${ratings.imdbID}?language=en`
+        : `https://www.themoviedb.org/search?query=${encodeURIComponent(ratings.title || '')}`;
+      parts.push(`<a href="${url}" target="_blank" class="nro-pill nro-tmdb nro-link ${cls}" title="Open TMDB">${pill}</a>`);
+    } else {
+      parts.push(`<span class="nro-pill nro-tmdb ${cls}">${pill}</span>`);
     }
   }
   if (ratings.rt) {
@@ -683,11 +827,11 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.omdb_api_key) {
     apiKey = changes.omdb_api_key.newValue || '';
     document.querySelectorAll('.nro-badge').forEach(el => el.remove());
-    scan();
+    scheduleScan(true);
   }
-  // List/toggle edits in the popup take effect immediately on open tabs
-  if (changes[LISTS_KEY] || changes[LIST_SETTINGS_KEY]) {
-    loadLists().then(() => { clearAllFilters(); scan(); });
+  // List/threshold edits in the popup take effect immediately on open tabs
+  if (changes[LISTS_KEY] || changes[LIST_SETTINGS_KEY] || changes[PREFS_KEY]) {
+    loadSettings().then(() => { clearAllFilters(); scheduleScan(true); });
   }
 });
 

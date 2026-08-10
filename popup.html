@@ -277,6 +277,27 @@
   .layout-info { font-size: 10px; color: #444; margin-top: 8px; line-height: 1.4; }
   .layout-info.warn { color: #f97316; }
 
+  /* OMDb daily quota meter */
+  .quota { margin: -6px 0 14px; }
+  .quota-label { font-size: 10px; color: #666; display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .quota-bar { height: 3px; background: #2a2a2a; border-radius: 2px; overflow: hidden; }
+  .quota-fill { height: 100%; width: 0; background: #4ade80; transition: width 0.3s, background 0.3s; }
+  .quota-fill.warn { background: #facc15; }
+  .quota-fill.hot { background: #f87171; }
+
+  /* Score threshold slider */
+  .range-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  input[type="range"] {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 3px; padding: 0; background: #2a2a2a; border: none; border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 12px; height: 12px;
+    border-radius: 50%; background: #E50914; cursor: pointer;
+  }
+  .range-val { font-size: 11px; font-weight: 800; color: #aaa; min-width: 38px; text-align: right; }
+  .range-val.off { color: #555; font-weight: 600; }
+
   .api-status {
     display: flex;
     align-items: center;
@@ -323,6 +344,13 @@
     font-family: Arial Black, Arial, sans-serif;
   }
   .pill-mc span { color: #4ade80; }
+  .pill-tmdb { border: 1px solid rgba(1,180,228,0.6); }
+  .pill-tmdb .pill-tmdb-logo {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 1px 3px; background: #01b4e4; color: #032541;
+    font-size: 8px; font-weight: 900; border-radius: 3px; letter-spacing: 0.02em;
+  }
+  .pill-tmdb span.score { color: #4ade80; }
 </style>
 </head>
 <body>
@@ -340,6 +368,11 @@
 <button class="save-btn" id="saveBtn" data-i18n="save">Save</button>
 <div class="status" id="status"></div>
 
+<div class="quota" id="quotaBox" style="display:none;margin-top:10px">
+  <div class="quota-label"><span id="quotaText"></span><span id="quotaReset"></span></div>
+  <div class="quota-bar"><div class="quota-fill" id="quotaFill"></div></div>
+</div>
+
 <div style="margin-top:12px">
   <label data-i18n="tmdb_label">TMDB API Key (optional)</label>
   <div class="exclude-row">
@@ -347,6 +380,15 @@
     <button class="exclude-btn" id="tmdbSaveBtn" style="flex:0 0 54px" data-i18n="save">Save</button>
   </div>
   <div class="list-status" id="tmdbStatus"></div>
+
+  <div class="list-row">
+    <span class="list-label" data-i18n="source_label">Primary data source</span>
+    <select id="sourceMode" class="list-select">
+      <option value="omdb">OMDb</option>
+      <option value="tmdb">TMDB</option>
+    </select>
+  </div>
+  <div class="list-status" id="sourceHelp"></div>
 </div>
 
 <hr class="divider">
@@ -394,14 +436,28 @@
 <hr class="divider">
 
 <div>
-  <div style="font-size:10px;color:#555;margin-bottom:8px" data-i18n="list_filter_label">IMDb list filter (applies on Netflix / Disney+)</div>
+  <div style="font-size:10px;color:#555;margin-bottom:8px" data-i18n="list_filter_label">List &amp; score filter (applies on Netflix / Disney+)</div>
+
+  <div class="list-row">
+    <span class="list-label" data-i18n="min_score_label">Minimum score</span>
+    <select id="minSource" class="list-select">
+      <option value="imdb">IMDb</option>
+      <option value="rt">RT</option>
+      <option value="mc">MC</option>
+    </select>
+  </div>
+  <div class="range-row">
+    <input type="range" id="minScore" min="0" max="9.5" step="0.5" value="0">
+    <span class="range-val off" id="minScoreVal">off</span>
+  </div>
+  <div class="list-status" id="minScoreHelp"></div>
 
   <div class="list-row">
     <label class="switch"><input type="checkbox" id="includeToggle"><span class="switch-track"></span></label>
     <span class="list-label" data-i18n="only_in_list">Only show titles in this list</span>
   </div>
   <div class="exclude-row">
-    <input type="text" class="list-input" id="includeUrl" data-i18n-placeholder="list_url_ph" placeholder="https://www.imdb.com/list/ls…">
+    <input type="text" class="list-input" id="includeUrl" data-i18n-placeholder="list_url_ph" placeholder="imdb.com/list/ls… or letterboxd.com/…">
     <button class="exclude-btn" id="includeLoad" style="flex:0 0 54px" data-i18n="load_list">Load</button>
   </div>
   <div class="list-status" id="includeStatus"></div>
@@ -411,7 +467,7 @@
     <span class="list-label" data-i18n="hide_in_list">Hide titles in this list</span>
   </div>
   <div class="exclude-row">
-    <input type="text" class="list-input" id="excludeUrl" data-i18n-placeholder="list_url_ph" placeholder="https://www.imdb.com/list/ls…">
+    <input type="text" class="list-input" id="excludeUrl" data-i18n-placeholder="list_url_ph" placeholder="imdb.com/list/ls… or letterboxd.com/…">
     <button class="exclude-btn" id="excludeLoad" style="flex:0 0 54px" data-i18n="load_list">Load</button>
   </div>
   <div class="list-status" id="excludeStatus"></div>
@@ -437,6 +493,9 @@
     </span>
     <span class="pill pill-rt">🍅 <span>94%</span></span>
     <span class="pill pill-mc"><span class="pill-mc-logo">M</span> <span>82/100</span></span>
+  </div>
+  <div class="badge-preview">
+    <span class="pill pill-tmdb"><span class="pill-tmdb-logo">TMDB</span> <span class="score">7.9</span></span>
   </div>
   <br>
   <span data-i18n="api_help">Get a free API Key at:</span><br>

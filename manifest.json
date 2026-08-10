@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Stream Rating Overlay",
-  "version": "1.2.0",
-  "description": "在 Netflix 與 Disney+ 片名旁顯示 IMDb、Rotten Tomatoes 與 Metacritic 評分",
+  "version": "1.3.0",
+  "description": "在 Netflix 與 Disney+ 片名旁顯示 IMDb、Rotten Tomatoes、Metacritic 與 TMDB 評分，並可依清單或分數過濾",
   "permissions": [
     "storage",
     "tabs",
-    "scripting"
+    "scripting",
+    "alarms"
   ],
   "background": {
     "service_worker": "background.js"
@@ -16,6 +17,7 @@
     "https://www.disneyplus.com/*",
     "https://www.omdbapi.com/*",
     "https://www.imdb.com/*",
+    "https://letterboxd.com/*",
     "https://api.themoviedb.org/*"
   ],
   "content_scripts": [

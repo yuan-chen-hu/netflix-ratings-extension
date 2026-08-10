@@ -36,10 +36,10 @@ const i18n = {
     sync_not_ready: '請至觀看紀錄頁',
     show_excluded: (n) => `▾ 查看 ${n} 部`,
     hide_excluded: '▴ 隱藏',
-    list_filter_label: 'IMDb 清單過濾（套用於 Netflix / Disney+ 頁面）',
+    list_filter_label: '清單與分數過濾（套用於 Netflix / Disney+ 頁面）',
     only_in_list: '只顯示清單內的影片',
     hide_in_list: '隱藏清單內的影片',
-    list_url_ph: 'https://www.imdb.com/list/ls…',
+    list_url_ph: 'imdb.com/list/ls… 或 letterboxd.com/…',
     load_list: '載入',
     filter_mode: '被過濾的影片',
     mode_dim: '淡化',
@@ -47,7 +47,7 @@ const i18n = {
     list_loading: '讀取清單中…',
     list_loaded: (n, d) => `✓ ${n} 部・更新於 ${d}`,
     list_cleared: '已清除清單',
-    list_err_url: '網址無效 — 請貼上 IMDb 清單網址（…/list/ls…）',
+    list_err_url: '網址無效 — 請貼上 IMDb 清單（…/list/ls…）或 Letterboxd 清單／watchlist／films 網址',
     list_err_empty: '讀不到內容 — 請確認清單設為「公開」',
     list_err_net: '無法連線 IMDb',
     list_need_url: '請先貼上清單網址並按「載入」',
@@ -63,6 +63,16 @@ const i18n = {
     tmdb_invalid: '✕ TMDB Key 無效',
     tmdb_cleared: '已清除 TMDB Key',
     tmdb_checking: '驗證中…',
+    source_label: '主要資料來源',
+    source_omdb_help: 'OMDb 提供 IMDb／RT／Metacritic 全部分數，但免費版每天只有 1,000 次。',
+    source_tmdb_help: 'TMDB 沒有日額度：卡片分數改由 TMDB 提供，只有展開卡片時才用 OMDb 補 RT／Metacritic。',
+    source_tmdb_needs_key: '⚠ 需要先填上方的 TMDB API Key，否則會自動退回 OMDb。',
+    quota_label: (n, max) => `OMDb 今日已用 ${n} / ${max}`,
+    quota_reset: 'UTC 00:00 重置',
+    min_score_label: '分數門檻',
+    min_score_off: '關閉',
+    min_score_help: (src, v) => `只顯示 ${src} ≥ ${v} 的影片；查不到分數的不會被隱藏。`,
+    min_score_tmdb_note: 'TMDB 模式下，卡片沒有 RT／Metacritic 分數，門檻請用 IMDb。',
   },
   en: {
     save: 'Save',
@@ -98,10 +108,10 @@ const i18n = {
     sync_not_ready: 'Visit viewingactivity',
     show_excluded: (n) => `▾ Show ${n}`,
     hide_excluded: '▴ Hide',
-    list_filter_label: 'IMDb list filter (applies on Netflix / Disney+)',
+    list_filter_label: 'List & score filter (applies on Netflix / Disney+)',
     only_in_list: 'Only show titles in this list',
     hide_in_list: 'Hide titles in this list',
-    list_url_ph: 'https://www.imdb.com/list/ls…',
+    list_url_ph: 'imdb.com/list/ls… or letterboxd.com/…',
     load_list: 'Load',
     filter_mode: 'Filtered titles',
     mode_dim: 'Dim',
@@ -109,7 +119,7 @@ const i18n = {
     list_loading: 'Loading list…',
     list_loaded: (n, d) => `✓ ${n} titles・updated ${d}`,
     list_cleared: 'List cleared',
-    list_err_url: 'Invalid URL — paste an IMDb list URL (…/list/ls…)',
+    list_err_url: 'Invalid URL — paste an IMDb list (…/list/ls…) or a Letterboxd list / watchlist / films URL',
     list_err_empty: 'Nothing found — make sure the list is public',
     list_err_net: 'Cannot reach IMDb',
     list_need_url: 'Paste a list URL and press Load first',
@@ -125,6 +135,16 @@ const i18n = {
     tmdb_invalid: '✕ Invalid TMDB key',
     tmdb_cleared: 'TMDB key cleared',
     tmdb_checking: 'Validating…',
+    source_label: 'Primary data source',
+    source_omdb_help: 'OMDb gives IMDb / RT / Metacritic in one call, but the free tier stops at 1,000 a day.',
+    source_tmdb_help: 'TMDB has no daily cap: tiles get TMDB scores, and OMDb is only called for RT / Metacritic when a card is expanded.',
+    source_tmdb_needs_key: '⚠ Add a TMDB API key above, otherwise this falls back to OMDb.',
+    quota_label: (n, max) => `OMDb used today: ${n} / ${max}`,
+    quota_reset: 'resets UTC 00:00',
+    min_score_label: 'Minimum score',
+    min_score_off: 'off',
+    min_score_help: (src, v) => `Only show titles rated ${src} ≥ ${v}. Titles with no score are never hidden.`,
+    min_score_tmdb_note: 'In TMDB mode tiles carry no RT / Metacritic score — use the IMDb threshold.',
   },
 };
 
@@ -244,6 +264,7 @@ chrome.storage.local.get('tmdb_api_key', (d) => {
     tmdbInput.value = d.tmdb_api_key;
     setTmdbStatusUI(t.tmdb_saved(), 'ok');
   }
+  renderPrefsUI(); // the source help depends on whether a TMDB key exists
 });
 
 tmdbSaveBtn.addEventListener('click', async () => {
@@ -265,11 +286,135 @@ tmdbSaveBtn.addEventListener('click', async () => {
   }
   await chrome.storage.local.set({ tmdb_api_key: key });
   setTmdbStatusUI(t.tmdb_saved(), 'ok');
+  renderPrefsUI();
 });
 
 tmdbInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') tmdbSaveBtn.click();
 });
+
+// --- OMDb quota meter ---
+// background.js counts every outgoing OMDb call per UTC day. Without this the
+// only signal that the free tier ran out is ratings silently going missing.
+const OMDB_DAILY_LIMIT = 1000;
+
+async function renderQuota() {
+  const box = document.getElementById('quotaBox');
+  const d = await chrome.storage.local.get('nro_quota');
+  const q = d.nro_quota;
+  const today = new Date().toISOString().slice(0, 10);
+  if (!q || q.day !== today || !q.count) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  document.getElementById('quotaText').textContent = t.quota_label(q.count, OMDB_DAILY_LIMIT);
+  document.getElementById('quotaReset').textContent = t.quota_reset;
+  const pct = Math.min(100, (q.count / OMDB_DAILY_LIMIT) * 100);
+  const fill = document.getElementById('quotaFill');
+  fill.style.width = pct + '%';
+  fill.className = 'quota-fill' + (pct >= 90 ? ' hot' : pct >= 70 ? ' warn' : '');
+}
+
+renderQuota();
+
+// --- Preferences: primary data source + score threshold ---
+const PREFS_KEY = 'nro_prefs';
+const PREFS_DEFAULT = { source: 'omdb', minScore: 0, minSource: 'imdb' };
+let prefs = { ...PREFS_DEFAULT };
+
+const sourceModeEl = document.getElementById('sourceMode');
+const minSourceEl = document.getElementById('minSource');
+const minScoreEl = document.getElementById('minScore');
+const minScoreValEl = document.getElementById('minScoreVal');
+
+// IMDb and TMDB are 0–10; RT and Metacritic are percentages.
+function scaleFor(source) {
+  return source === 'imdb' ? { max: 9.5, step: 0.5 } : { max: 95, step: 5 };
+}
+
+function formatThreshold(source, value) {
+  if (source === 'imdb') return value.toFixed(1);
+  if (source === 'rt') return `${value}%`;
+  return `${value}/100`;
+}
+
+function sourceName(source) {
+  return source === 'imdb' ? 'IMDb' : source === 'rt' ? 'Rotten Tomatoes' : 'Metacritic';
+}
+
+function renderPrefsUI() {
+  sourceModeEl.value = prefs.source;
+  const hasTmdbKey = !!tmdbInput.value.trim();
+  const help = document.getElementById('sourceHelp');
+  if (prefs.source === 'tmdb') {
+    help.textContent = hasTmdbKey ? t.source_tmdb_help : t.source_tmdb_needs_key;
+    help.className = hasTmdbKey ? 'list-status' : 'list-status err';
+  } else {
+    help.textContent = t.source_omdb_help;
+    help.className = 'list-status';
+  }
+
+  const { max, step } = scaleFor(prefs.minSource);
+  minSourceEl.value = prefs.minSource;
+  minScoreEl.max = String(max);
+  minScoreEl.step = String(step);
+  minScoreEl.value = String(Math.min(prefs.minScore, max));
+
+  const off = !(prefs.minScore > 0);
+  minScoreValEl.textContent = off ? t.min_score_off : formatThreshold(prefs.minSource, prefs.minScore);
+  minScoreValEl.className = off ? 'range-val off' : 'range-val';
+
+  const hint = document.getElementById('minScoreHelp');
+  if (prefs.source === 'tmdb' && prefs.minSource !== 'imdb') {
+    hint.textContent = t.min_score_tmdb_note;
+    hint.className = 'list-status err';
+  } else if (off) {
+    hint.textContent = '';
+    hint.className = 'list-status';
+  } else {
+    hint.textContent = t.min_score_help(sourceName(prefs.minSource), formatThreshold(prefs.minSource, prefs.minScore));
+    hint.className = 'list-status';
+  }
+}
+
+async function savePrefs() {
+  await chrome.storage.local.set({ [PREFS_KEY]: prefs });
+}
+
+sourceModeEl.addEventListener('change', async () => {
+  prefs.source = sourceModeEl.value;
+  await savePrefs();
+  renderPrefsUI();
+});
+
+minSourceEl.addEventListener('change', async () => {
+  prefs.minSource = minSourceEl.value;
+  // The scales don't line up (7.5 on IMDb vs 75%), so switching source resets
+  // the threshold rather than silently reinterpreting the number.
+  prefs.minScore = 0;
+  await savePrefs();
+  renderPrefsUI();
+  renderList();
+});
+
+minScoreEl.addEventListener('input', () => {
+  prefs.minScore = parseFloat(minScoreEl.value) || 0;
+  renderPrefsUI();
+});
+
+minScoreEl.addEventListener('change', async () => {
+  prefs.minScore = parseFloat(minScoreEl.value) || 0;
+  await savePrefs();
+  renderPrefsUI();
+  renderList();
+});
+
+async function initPrefs() {
+  const d = await chrome.storage.local.get(PREFS_KEY);
+  prefs = Object.assign({}, PREFS_DEFAULT, d[PREFS_KEY] || {});
+  renderPrefsUI();
+  renderList();
+}
+
+initPrefs();
 
 // --- Ranking ---
 let currentSource = 'imdb';
@@ -310,7 +455,9 @@ function parseAwards(str) {
 }
 
 function parseScore(source, ratings) {
-  if (source === 'imdb') return ratings.imdb ? parseFloat(ratings.imdb) : null;
+  // In TMDB-primary mode most cached entries only carry a TMDB score. It's the
+  // same 0–10 scale, so it ranks alongside IMDb — labelled per item.
+  if (source === 'imdb') return ratings.imdb ? parseFloat(ratings.imdb) : (ratings.tmdb ? parseFloat(ratings.tmdb) : null);
   if (source === 'rt') return ratings.rt ? parseInt(ratings.rt) : null;
   if (source === 'mc') return ratings.mc ? parseInt(ratings.mc) : null;
   if (source === 'awards') {
@@ -321,7 +468,7 @@ function parseScore(source, ratings) {
 }
 
 function formatScore(source, ratings) {
-  if (source === 'imdb') return ratings.imdb;
+  if (source === 'imdb') return ratings.imdb || ratings.tmdb;
   if (source === 'rt') return ratings.rt;
   if (source === 'mc') return ratings.mc;
   if (source === 'awards') {
@@ -340,6 +487,13 @@ function scoreClass(source, val) {
   if (source === 'mc') return val >= 75 ? 'great' : val >= 50 ? 'ok' : 'bad';
   if (source === 'awards') return val >= 20 ? 'great' : val >= 5 ? 'ok' : 'bad';
   return '';
+}
+
+// The IMDb column can hold a TMDB score (TMDB-primary mode); say so per row
+// rather than passing a TMDB number off as an IMDb one.
+function itemSourceLabel(source, ratings) {
+  if (source === 'imdb' && !ratings.imdb && ratings.tmdb) return 'TMDB';
+  return sourceLabel(source);
 }
 
 function sourceLabel(source) {
@@ -378,7 +532,7 @@ function renderList() {
         <span class="rank-num">${i + 1}</span>
         <div class="rank-info">
           <div class="rank-name" title="${safeTitle}" data-search="${encodeURIComponent(item.title)}">${safeTitle}</div>
-          <div class="rank-meta">${yearStr} <span class="rank-score ${cls}">${sourceLabel(currentSource)} ${escapeHtml(display)}</span></div>
+          <div class="rank-meta">${yearStr} <span class="rank-score ${cls}">${itemSourceLabel(currentSource, item.ratings)} ${escapeHtml(display)}</span></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">
           <button class="rank-skip" data-title="${safeRaw}">${t.skip}</button>
@@ -678,7 +832,21 @@ function passesListFilter(item) {
   const r = item.ratings || {};
   if (listSettings.excludeOn && listMatchers.exclude && matchList(listMatchers.exclude, item.rawTitle, r)) return false;
   if (listSettings.includeOn && listMatchers.include && !matchList(listMatchers.include, item.rawTitle, r)) return false;
+  if (prefs.minScore > 0) {
+    const s = thresholdScore(r);
+    if (s != null && s < prefs.minScore) return false;
+  }
   return true;
+}
+
+// Keep in sync with the copy in content.js — TMDB shares IMDb's 0–10 scale, so
+// it stands in when only TMDB data is available.
+function thresholdScore(ratings) {
+  if (!ratings) return null;
+  if (prefs.minSource === 'rt') return ratings.rt ? parseInt(ratings.rt, 10) : null;
+  if (prefs.minSource === 'mc') return ratings.mc ? parseInt(ratings.mc, 10) : null;
+  const v = ratings.imdb || ratings.tmdb;
+  return v ? parseFloat(v) : null;
 }
 
 function setListStatus(slot, text, cls) {
@@ -809,6 +977,7 @@ async function initListFilter() {
 // A tab-based list load can outlive the message reply — reflect it as soon as
 // background.js writes the result.
 chrome.storage.onChanged.addListener((changes) => {
+  if (changes.nro_quota) renderQuota();
   if (!changes.nro_lists) return;
   storedLists = changes.nro_lists.newValue || {};
   LIST_SLOTS.forEach(slot => {

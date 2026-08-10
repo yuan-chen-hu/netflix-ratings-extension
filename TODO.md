@@ -18,33 +18,38 @@
 - [x] 串接 TMDB API：中文／日文／韓文片名 → IMDb ID → OMDb `?i=`；Latin 片名查無結果時也會用 TMDB 補救（popup 可填 TMDB key，選填）
 - [x] Disney+ selector 自適應：`/browse/` 失效時改用結構偵測（排除 nav/header），alt 文字清洗（`Loki | Disney+` → `Loki`）
 - [x] 品牌中性化：名稱改為 Stream Rating Overlay，popup logo 改為 ★，重新產生 icon（原本三個 PNG 的 IDAT 資料損毀，解碼器讀不出來）
+- [x] **TMDB 當主資料源**（`nro_prefs.source`）：格狀卡片的分數／年份／類型改由 TMDB 提供，OMDb 只在展開卡片時補 RT / Metacritic / 獎項。TMDB 徽章（藍色 pill）在沒有 IMDb 分數時取代 IMDb 徽章
+- [x] **分數門檻過濾**：popup 滑桿（IMDb・RT・MC，依來源自動換算刻度），低於門檻淡化或隱藏；查不到分數的片不會被隱藏。同時套用到頁面與 popup 排行榜
+- [x] **額度儀表**：`nro_quota` 記錄當日 OMDb 呼叫次數，popup 顯示「今日已用 N / 1000」，接近上限轉黃轉紅
+- [x] **片名 → imdbID 對應表**（`nro_idmap`）：獨立存放、永不過期、上限 3,000 筆，評分快取被 LRU 清掉也不必重跑 TMDB 搜尋
+- [x] **Letterboxd 清單支援**：list / watchlist / films 三種網址，純 HTML 直接抓（無 WAF），片名取自 `data-film-name`、poster alt 與 slug
+- [x] **清單自動更新**：`chrome.alarms` 每 6 小時檢查，超過 7 天的清單背景重抓，且不會動使用者關掉的開關
+- [x] **效能：掃描範圍縮小**：MutationObserver 收集有變動的子樹，只在這些子樹跑選擇器掃描；會觸發 layout 的結構偵測改為節流 2 秒 + `requestIdleCallback`
+- [x] **效能：同片名索引**：`waiting` Map 記錄等同一個片名的卡片，查詢結束時直接更新這些卡片，取代整頁 `rescan()`
+- [x] **測試**：`tests/`（node:test + jsdom，77 項）— 直接載入出貨用原始碼，涵蓋卡片偵測、徽章落點、資料來源順序、額度計算、清單解析、過濾邏輯、popup 畫面與 manifest 權限同步。jsdom 僅為 devDependency，出貨仍是「無 build step」
 
 ## 待辦（需實機驗證）
 
 - [ ] 確認來源 — 驗證 OMDb 回傳評分與各網站實際數值一致（需本機 API key + 逐片人工比對，無法離線驗證）
 - [ ] 實機驗證 Netflix / Disney+ 新版面：確認 `heuristicCards()` / `artworkBox()` 在真實 DOM 上的落點（目前以 jsdom 模擬版面驗證）
 - [ ] IMDb 清單分頁：確認新版清單頁 `?page=N` 與「50 more」按鈕文案（目前兩種都試）
-- [ ] TMDB 比對品質：`search/multi` 第一筆命中率、必要時加 `language` 參數與片名相似度排序
+- [ ] Letterboxd 版面：確認目前的 poster 標記（`data-film-name` / `data-item-slug` / `img.image[alt]`）與實際頁面一致，以及 `/page/N/` 的翻頁上限
+- [ ] TMDB 比對品質：`pickTmdbResult()` 已依「片名完全相符 → 年份 → 熱門度」排序並帶 `language=`，仍需實際比對命中率
+- [ ] TMDB 模式的分數落差：TMDB 與 IMDb 同為 10 分制但取樣母體不同，需確認徽章顏色門檻（≥7.5 / ≥6）對 TMDB 是否仍合理
 
 ## 建議（依效益排序）
 
-### 高
-
-- [ ] **改用 TMDB 當主資料源，OMDb 只補 RT/MC** — OMDb 免費版 1,000 次/天，逛個大首頁就快見底；TMDB 無同等日額度。分數／年份／類型改由 TMDB 提供，只有需要 Rotten Tomatoes / Metacritic 時才打 OMDb
-- [ ] **分數門檻過濾** — 「只顯示 IMDb ≥ 7.5」滑桿。過濾用的 CSS 與 pipeline（`applyListFilter` / `.nro-filtered`）都已存在，只差 UI
-- [ ] **額度儀表** — 記錄當日 OMDb 呼叫次數，popup 顯示「今日已用 340 / 1000」；目前只有撞到上限才會知道
-
 ### 中
 
-- [ ] **快取 localized title → imdbID 對應表** — 快取被 LRU 清掉後，中文片名要重付 2 次 TMDB + 1 次 OMDb；此對應永不過期，值得獨立存放
-- [ ] **Letterboxd 清單支援** — 沿用同一套 include/exclude 機制，且 Letterboxd 沒有 WAF，比 IMDb 好抓
-- [ ] **清單自動更新** — 已載入的 IMDb 清單每週背景重抓一次
+- [ ] **快取容量隨模式調整** — TMDB 模式沒有日額度，500 筆的上限反而成為主要限制，可考慮依 `source` 放寬
+- [ ] **門檻過濾支援「未評分也隱藏」選項** — 目前查不到分數一律保留，某些使用情境（只想看高分片）會希望連未知的也收起來
 
 ### 效能
 
-- [ ] `scan()` 每次 mutation（防抖 200ms）都對整份文件 `querySelectorAll`；heuristic 路徑還會掃所有 `img` 並讀 `offsetWidth`（觸發 layout）。可改為只掃 mutation target 子樹，或把量測搬進 `requestIdleCallback`
-- [ ] 用 `Map<title, cards[]>` 索引，fetch 完只更新相關卡片，取代目前的全頁 `rescan()`
+- [ ] `heuristicScan()` 仍是整份文件掃描，只是改到 idle 執行；若真實頁面上仍偏重，可再依 `dirtyRoots` 縮小量測範圍
+- [ ] `scanSpecialAreas()` 每次掃描都對整份文件查 hover 彈窗／billboard，可改為由 MutationObserver 判斷是否真的出現過
 
 ### 工程
 
-- [ ] 將 jsdom 測試（卡片偵測 / 徽章落點 / 清單比對 / TMDB 呼叫順序，共 99 項）收進 `tests/`，jsdom 僅列 devDependency，不影響「無 build step」的出貨方式 — Netflix 改版時這是唯一能當下抓到破圖的機制
+- [ ] 測試加入 Disney+ 版面案例（目前 jsdom 測試以 Netflix 結構為主）
+- [ ] CI：把 `npm test` 接到 GitHub Actions，避免改動 Netflix 選擇器後才在實機上發現破圖

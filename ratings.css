@@ -37,6 +37,27 @@
   flex-shrink: 0;
 }
 
+/* TMDB pill — shown instead of IMDb when TMDB is the primary source */
+.nro-tmdb {
+  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(1,180,228,0.6);
+}
+
+.nro-tmdb-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 3px;
+  background: #01b4e4;
+  color: #032541;
+  font-size: 8px;
+  font-weight: 900;
+  border-radius: 3px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+  font-family: Arial Black, Arial, sans-serif;
+}
+
 /* RT pill */
 .nro-rt {
   background: rgba(0,0,0,0.75);
